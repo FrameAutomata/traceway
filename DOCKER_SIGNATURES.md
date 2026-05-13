@@ -11,18 +11,25 @@ Signed images provide:
 
 ## Available Images
 
-Traceway publishes two Docker images to GitHub Container Registry (GHCR):
+Traceway publishes three Docker image variants to GitHub Container Registry (GHCR):
 
 | Image | Purpose | Size | Best For |
 |-------|---------|------|----------|
-| `ghcr.io/tracewayapp/traceway:v*` | **Full** — includes ClickHouse, PostgreSQL, supervisord | ~600MB | All-in-one self-hosted deployments |
-| `ghcr.io/tracewayapp/traceway:v*-minimal` | **Minimal** — backend + frontend only | ~20-30MB | External ClickHouse/PostgreSQL, resource-constrained environments |
+| `ghcr.io/tracewayapp/traceway:v*` | **Full** — ClickHouse + PostgreSQL + supervisord | ~600MB | Large deployments, multi-service setup |
+| `ghcr.io/tracewayapp/traceway:v*-minimal` | **Minimal** — single binary with external databases | ~20-30MB | Kubernetes, scalable setups, external database infrastructure |
+| `ghcr.io/tracewayapp/traceway:v*-sqlite` | **SQLite** — embedded SQLite, single binary, zero dependencies | ~50-80MB | Small VPS, testing, single-server deployments, embedded mode |
 
-Both images are signed. Latest release:
+All images are cryptographically signed. Pull the latest release:
 
 ```bash
-docker pull ghcr.io/tracewayapp/traceway:latest           # Full image
-docker pull ghcr.io/tracewayapp/traceway:minimal          # Minimal image
+# Full image (all services included)
+docker pull ghcr.io/tracewayapp/traceway:latest
+
+# Minimal image (external databases)
+docker pull ghcr.io/tracewayapp/traceway:minimal
+
+# SQLite image (embedded, no external dependencies)
+docker pull ghcr.io/tracewayapp/traceway:sqlite
 ```
 
 ## Verifying Signatures
@@ -61,6 +68,12 @@ cosign verify \
   --certificate-identity-regexp '.*' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
   ghcr.io/tracewayapp/traceway:minimal
+
+# SQLite image
+cosign verify \
+  --certificate-identity-regexp '.*' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  ghcr.io/tracewayapp/traceway:sqlite
 ```
 
 ### Example Output
@@ -104,7 +117,7 @@ volumes:
 
 ## Minimal Image with External Databases
 
-For the minimal image with external ClickHouse/PostgreSQL:
+For scalable deployments with external ClickHouse/PostgreSQL:
 
 ```yaml
 version: '3.8'
@@ -129,6 +142,40 @@ services:
   postgres:
     image: postgres:15
     # ... configuration
+```
+
+## SQLite Image (Embedded, Zero Dependencies)
+
+For small deployments, testing, or single-server setups:
+
+```yaml
+version: '3.8'
+
+services:
+  traceway:
+    image: ghcr.io/tracewayapp/traceway:sqlite
+    ports:
+      - "80:80"
+      - "8082:8082"
+    volumes:
+      - traceway_data:/data
+    environment:
+      GIN_MODE: release
+
+volumes:
+  traceway_data:
+```
+
+The SQLite image:
+- Stores all data in `/data/traceway.db` (SQLite database)
+- Stores blobs in `/data/storage` (if using local storage)
+- Requires only one volume mount for all persistent state
+- Perfect for VPS, small instances, or development
+
+To persist data across restarts, mount a host folder or named volume at `/data`:
+
+```bash
+docker run -v /var/lib/traceway:/data ghcr.io/tracewayapp/traceway:sqlite
 ```
 
 ## Troubleshooting
