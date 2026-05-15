@@ -327,23 +327,27 @@ func (e clientController) Report(c *gin.Context) {
 }
 
 var (
-	errorMessageRe = regexp.MustCompile(`(?m)^(\*?[\w.]+):\s*.+`)
-	absolutePathRe = regexp.MustCompile(`/[^\s:]+/([^/\s:]+:\d+)`)
-	versionRe      = regexp.MustCompile(`@v[\d.]+`)
-	hexRe          = regexp.MustCompile(`0x[0-9a-fA-F]+`)
-	uuidRe         = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
-	largeNumberRe  = regexp.MustCompile(`(^|[^:\d])(\d{5,})($|[^\d])`)
-	emailRe        = regexp.MustCompile(`[\w.\-]+@[\w.\-]+\.\w+`)
-	ipRe           = regexp.MustCompile(`\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?`)
-	goroutineRe    = regexp.MustCompile(`goroutine \d+`)
-	spacesRe       = regexp.MustCompile(`[ \t]+`)
-	newlinesRe     = regexp.MustCompile(`\n+`)
+	errorMessageRe  = regexp.MustCompile(`(?m)^(\*?[\w.]+):\s*.+`)
+	causedByRe      = regexp.MustCompile(`(?m)^(Caused by:\s*[\w.$]+):\s*.+`)
+	absolutePathRe  = regexp.MustCompile(`/[^\s:]+/([^/\s:]+:\d+)`)
+	versionRe       = regexp.MustCompile(`@v[\d.]+`)
+	hexRe           = regexp.MustCompile(`0x[0-9a-fA-F]+`)
+	uuidRe          = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+	largeNumberRe   = regexp.MustCompile(`(^|[^:\d])(\d{5,})($|[^\d])`)
+	emailRe         = regexp.MustCompile(`[\w.\-]+@[\w.\-]+\.\w+`)
+	ipRe            = regexp.MustCompile(`\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?`)
+	goroutineRe     = regexp.MustCompile(`goroutine \d+`)
+	javaLineNumRe   = regexp.MustCompile(`\((\w[\w.$]*\.(?:java|kt|scala)):\d+\)`)
+	javaEllipsisRe  = regexp.MustCompile(`\.\.\. \d+ more`)
+	spacesRe        = regexp.MustCompile(`[ \t]+`)
+	newlinesRe      = regexp.MustCompile(`\n+`)
 )
 
 func ComputeExceptionHash(stackTrace string, isMessage bool) string {
 	normalized := stackTrace
 
 	if !isMessage {
+		normalized = causedByRe.ReplaceAllString(normalized, "$1")
 		normalized = errorMessageRe.ReplaceAllString(normalized, "$1")
 		normalized = absolutePathRe.ReplaceAllString(normalized, "$1")
 		normalized = versionRe.ReplaceAllString(normalized, "")
@@ -353,6 +357,8 @@ func ComputeExceptionHash(stackTrace string, isMessage bool) string {
 		normalized = emailRe.ReplaceAllString(normalized, "<email>")
 		normalized = ipRe.ReplaceAllString(normalized, "<ip>")
 		normalized = goroutineRe.ReplaceAllString(normalized, "goroutine <n>")
+		normalized = javaLineNumRe.ReplaceAllString(normalized, "($1)")
+		normalized = javaEllipsisRe.ReplaceAllString(normalized, "... more")
 		normalized = spacesRe.ReplaceAllString(normalized, " ")
 		normalized = newlinesRe.ReplaceAllString(normalized, "\n")
 	}

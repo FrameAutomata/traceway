@@ -5,6 +5,51 @@ import (
 	"testing"
 )
 
+func TestComputeExceptionHash_Java(t *testing.T) {
+	// Two occurrences of the same exception with different user IDs in the
+	// message must produce the same hash (message is stripped).
+	stackA := "org.springframework.dao.EmptyResultDataAccessException: Incorrect result size: expected 1, actual 0\n\tat org.springframework.dao.support.DataAccessUtils.requiredSingleResult(DataAccessUtils.java:90)\n\tat com.example.UserService.getUser(UserService.java:38)\n\t... 52 more"
+	stackB := "org.springframework.dao.EmptyResultDataAccessException: No user found for id 99999\n\tat org.springframework.dao.support.DataAccessUtils.requiredSingleResult(DataAccessUtils.java:90)\n\tat com.example.UserService.getUser(UserService.java:38)\n\t... 52 more"
+	if ComputeExceptionHash(stackA, false) != ComputeExceptionHash(stackB, false) {
+		t.Error("same exception with different messages should have the same hash")
+	}
+
+	// Line number changes must not change the hash.
+	stackC := "java.lang.NullPointerException: Cannot invoke method\n\tat com.example.Service.run(Service.java:10)\n\tat com.example.Main.main(Main.java:5)"
+	stackD := "java.lang.NullPointerException: Cannot invoke method\n\tat com.example.Service.run(Service.java:99)\n\tat com.example.Main.main(Main.java:42)"
+	if ComputeExceptionHash(stackC, false) != ComputeExceptionHash(stackD, false) {
+		t.Error("same exception at different line numbers should have the same hash")
+	}
+
+	// Different ellipsis counts must not change the hash.
+	stackE := "java.io.IOException: timeout\n\tat com.example.Client.send(Client.java:20)\n\t... 10 more"
+	stackF := "java.io.IOException: timeout\n\tat com.example.Client.send(Client.java:20)\n\t... 73 more"
+	if ComputeExceptionHash(stackE, false) != ComputeExceptionHash(stackF, false) {
+		t.Error("same exception with different ellipsis counts should have the same hash")
+	}
+
+	// Caused-by chains with different messages must not change the hash.
+	stackG := "org.springframework.web.client.RestClientException: error\n\tat com.example.Api.call(Api.java:15)\nCaused by: java.net.SocketTimeoutException: connect timed out\n\tat java.net.Socket.connect(Socket.java:633)"
+	stackH := "org.springframework.web.client.RestClientException: error\n\tat com.example.Api.call(Api.java:15)\nCaused by: java.net.SocketTimeoutException: Read timed out after 30000ms\n\tat java.net.Socket.connect(Socket.java:633)"
+	if ComputeExceptionHash(stackG, false) != ComputeExceptionHash(stackH, false) {
+		t.Error("same caused-by chain with different messages should have the same hash")
+	}
+
+	// Kotlin stack frames (.kt extension) must have line numbers stripped too.
+	stackI := "java.lang.IllegalStateException: bad state\n\tat com.example.Service.process(Service.kt:55)"
+	stackJ := "java.lang.IllegalStateException: bad state\n\tat com.example.Service.process(Service.kt:88)"
+	if ComputeExceptionHash(stackI, false) != ComputeExceptionHash(stackJ, false) {
+		t.Error("same Kotlin exception at different line numbers should have the same hash")
+	}
+
+	// Structurally different exceptions must NOT have the same hash.
+	stackK := "java.lang.NullPointerException: npe\n\tat com.example.Foo.bar(Foo.java:1)"
+	stackL := "java.lang.IllegalArgumentException: iae\n\tat com.example.Foo.bar(Foo.java:1)"
+	if ComputeExceptionHash(stackK, false) == ComputeExceptionHash(stackL, false) {
+		t.Error("different exception types should have different hashes")
+	}
+}
+
 func TestIsEmptyRaw(t *testing.T) {
 	cases := []struct {
 		name string

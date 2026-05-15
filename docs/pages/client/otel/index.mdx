@@ -64,6 +64,25 @@ const metricExporter = new OTLPMetricExporter({
 
 The same pattern applies to any language — set the OTLP/HTTP endpoint and the `Authorization` header in your exporter config.
 
+## Quick Start: Spring Boot (Java Agent)
+
+The [OpenTelemetry Java agent](https://opentelemetry.io/docs/zero-code/java/agent/) instruments Spring Boot applications with zero code changes. Download the agent JAR and pass it to the JVM:
+
+```bash
+java \
+  -javaagent:opentelemetry-javaagent.jar \
+  -Dotel.service.name=my-spring-app \
+  -Dotel.exporter.otlp.endpoint=https://<your-instance>/api/otel \
+  -Dotel.exporter.otlp.headers="Authorization=Bearer <project_token>" \
+  -Dotel.metrics.exporter=none \
+  -Dotel.logs.exporter=none \
+  -jar target/my-app.jar
+```
+
+Setting `OTEL_EXPORTER_OTLP_ENDPOINT` to `…/api/otel` works too — the agent appends `/v1/traces` automatically, which matches Traceway's ingest path.
+
+Exceptions thrown in your controllers are automatically captured as span events and appear in **Issues**, grouped by exception class across deployments regardless of differing error messages or line numbers.
+
 ## Quick Start: OTel Collector
 
 If you already run an [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) or want a central pipeline that fans out to multiple backends, you can route data through it. **This is optional** — the direct SDK export above works without a Collector.

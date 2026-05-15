@@ -168,7 +168,7 @@ func convertTraces(projectId uuid.UUID, req *coltracepb.ExportTraceServiceReques
 				if event.Name == "exception" {
 					exc := buildException(
 						projectId, traceId, traceType, event,
-						serverName, appVersion,
+						allAttrs, serverName, appVersion,
 					)
 					exc.DistributedTraceId = distributedTraceId
 					exceptions = append(exceptions, exc)
@@ -284,6 +284,7 @@ func buildException(
 	projectId, traceId uuid.UUID,
 	traceType string,
 	event *tracepb.Span_Event,
+	spanAttrs map[string]string,
 	serverName, appVersion string,
 ) models.ExceptionStackTrace {
 	eventAttrs := event.Attributes
@@ -302,6 +303,7 @@ func buildException(
 		ExceptionHash: hash,
 		StackTrace:    stackTrace,
 		RecordedAt:    nanoToTime(event.TimeUnixNano),
+		Attributes:    spanAttrs,
 		AppVersion:    appVersion,
 		ServerName:    serverName,
 	}
@@ -481,7 +483,10 @@ func formatExceptionStackTrace(excType, excMessage, excStacktrace string) string
 		}
 	}
 	if excStacktrace != "" {
-		if header != "" {
+		// JVM OTel agents embed the exception class name as the first line of the
+		// stacktrace (e.g. "java.lang.RuntimeException: msg\n\tat ..."). Skip
+		// prepending the header when it's already there to avoid a duplicate line.
+		if header != "" && (excType == "" || !strings.HasPrefix(excStacktrace, excType)) {
 			return fmt.Sprintf("%s\n%s", header, excStacktrace)
 		}
 		return excStacktrace

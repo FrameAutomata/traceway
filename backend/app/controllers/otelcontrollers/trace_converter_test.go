@@ -79,6 +79,7 @@ func TestConvertTraces_Snapshot(t *testing.T) {
 		{"openrouter_ai_trace", "testdata/openrouter_ai_trace.json"},
 		{"node_better_auth", "testdata/node_better_auth.json"},
 		{"node_sign_in", "testdata/node_sign_in.json"},
+		{"spring_boot_exception", "testdata/spring_boot_exception.json"},
 	}
 
 	for _, tt := range tests {
@@ -385,6 +386,62 @@ func TestTraceIdResolution_CrossScope(t *testing.T) {
 		if s.TraceId != rootTraceId {
 			t.Errorf("span %q has traceId %s, want %s (root endpoint)", s.Name, s.TraceId, rootTraceId)
 		}
+	}
+}
+
+func TestFormatExceptionStackTrace(t *testing.T) {
+	tests := []struct {
+		name         string
+		excType      string
+		excMessage   string
+		excStacktrace string
+		want         string
+	}{
+		{
+			name:         "go style - no stacktrace",
+			excType:      "RuntimeError",
+			excMessage:   "something failed",
+			excStacktrace: "",
+			want:         "RuntimeError: something failed",
+		},
+		{
+			name:         "go style - with stacktrace that doesn't start with type",
+			excType:      "RuntimeError",
+			excMessage:   "something failed",
+			excStacktrace: "goroutine 1 [running]:\nmain.foo()\n\t/app/main.go:10",
+			want:         "RuntimeError: something failed\ngoroutine 1 [running]:\nmain.foo()\n\t/app/main.go:10",
+		},
+		{
+			// Java/JVM OTel agents include the full "Type: message\n\tat ..." in
+			// exception.stacktrace, so we must not prepend a duplicate header.
+			name:         "java style - stacktrace already starts with exception type",
+			excType:      "org.springframework.dao.EmptyResultDataAccessException",
+			excMessage:   "Incorrect result size: expected 1, actual 0",
+			excStacktrace: "org.springframework.dao.EmptyResultDataAccessException: Incorrect result size: expected 1, actual 0\n\tat org.springframework.dao.support.DataAccessUtils.requiredSingleResult(DataAccessUtils.java:90)\n\tat com.example.UserService.getUser(UserService.java:38)",
+			want:         "org.springframework.dao.EmptyResultDataAccessException: Incorrect result size: expected 1, actual 0\n\tat org.springframework.dao.support.DataAccessUtils.requiredSingleResult(DataAccessUtils.java:90)\n\tat com.example.UserService.getUser(UserService.java:38)",
+		},
+		{
+			name:         "java style - type only, no message",
+			excType:      "java.lang.NullPointerException",
+			excMessage:   "",
+			excStacktrace: "java.lang.NullPointerException\n\tat com.example.Service.run(Service.java:10)",
+			want:         "java.lang.NullPointerException\n\tat com.example.Service.run(Service.java:10)",
+		},
+		{
+			name:         "empty everything",
+			excType:      "",
+			excMessage:   "",
+			excStacktrace: "",
+			want:         "unknown exception",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatExceptionStackTrace(tt.excType, tt.excMessage, tt.excStacktrace)
+			if got != tt.want {
+				t.Errorf("formatExceptionStackTrace() =\n%q\nwant:\n%q", got, tt.want)
+			}
+		})
 	}
 }
 

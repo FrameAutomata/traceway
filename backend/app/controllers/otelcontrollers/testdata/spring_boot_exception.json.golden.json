@@ -1,0 +1,30 @@
+{
+  "endpointCount": 1,
+  "endpoints": [
+    {
+      "endpoint": "GET /api/users/{id}",
+      "statusCode": 500,
+      "serverName": "user-service",
+      "appVersion": "2.1.0"
+    }
+  ],
+  "taskCount": 0,
+  "spanCount": 1,
+  "spans": [
+    {
+      "name": "SELECT id, email, name FROM users WHERE id = ?",
+      "linkedToParent": true
+    }
+  ],
+  "exceptionCount": 1,
+  "exceptions": [
+    {
+      "stackTrace": "org.springframework.dao.EmptyResultDataAccessException: Incorrect result size: expected 1, actual 0\n\tat org.springframework.dao.support.DataAccessUtils.requiredSingleResult(DataAccessUtils.java:90)\n\tat com.example.userservice.repository.UserRepository.findById(UserRepository.java:42)\n\tat com.example.userservice.service.UserService.getUser(UserService.java:38)\n\tat com.example.userservice.controller.UserController.getUser(UserController.java:28)\n\tat java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)\n\tat java.base/java.lang.reflect.Method.invoke(Method.java:568)\n\t... 52 more",
+      "traceType": "endpoint"
+    }
+  ],
+  "aiTraceCount": 0,
+  "aiTraces": [],
+  "conversationCount": 0,
+  "allSpansLinked": true
+}
