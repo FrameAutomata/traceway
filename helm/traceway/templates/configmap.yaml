@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "traceway.fullname" . }}
+  labels:
+    {{- include "traceway.labels" . | nindent 4 }}
+data:
+  GIN_MODE: "release"
+
+  {{- if eq .Values.variant "sqlite" }}
+  DB_TYPE: "sqlite"
+  SQLITE_PATH: {{ .Values.sqlite.path | quote }}
+  SQLITE_RETENTION_DAYS: {{ .Values.sqlite.retentionDays | quote }}
+  {{- end }}
+
+  {{- if eq .Values.variant "minimal" }}
+  CLICKHOUSE_SERVER: {{ required "clickhouse.server is required when variant=minimal" .Values.clickhouse.server | quote }}
+  CLICKHOUSE_DATABASE: {{ .Values.clickhouse.database | quote }}
+  CLICKHOUSE_USERNAME: {{ .Values.clickhouse.username | quote }}
+  CLICKHOUSE_TLS: {{ .Values.clickhouse.tls | quote }}
+  POSTGRES_HOST: {{ required "postgres.host is required when variant=minimal" .Values.postgres.host | quote }}
+  POSTGRES_PORT: {{ .Values.postgres.port | quote }}
+  POSTGRES_DATABASE: {{ .Values.postgres.database | quote }}
+  POSTGRES_USERNAME: {{ .Values.postgres.username | quote }}
+  POSTGRES_SSLMODE: {{ .Values.postgres.sslmode | quote }}
+  {{- end }}
+
+  STORAGE_TYPE: {{ .Values.storage.type | quote }}
+  STORAGE_PATH: {{ .Values.storage.path | quote }}
+  {{- if eq .Values.storage.type "s3" }}
+  S3_BUCKET: {{ .Values.storage.s3.bucket | quote }}
+  S3_REGION: {{ .Values.storage.s3.region | quote }}
+  S3_ACCESS_KEY: {{ .Values.storage.s3.accessKey | quote }}
+  {{- if .Values.storage.s3.endpoint }}
+  S3_ENDPOINT: {{ .Values.storage.s3.endpoint | quote }}
+  {{- end }}
+  {{- end }}
+
+  SESSION_RECORDING_RETENTION_DAYS: {{ .Values.sessionRecording.retentionDays | quote }}
+  SESSION_RECORDING_UPLOAD_WORKERS: {{ .Values.sessionRecording.uploadWorkers | quote }}
+  SESSION_RECORDING_UPLOAD_QUEUE_SIZE: {{ .Values.sessionRecording.uploadQueueSize | quote }}
+
+  {{- if .Values.app.baseURL }}
+  APP_BASE_URL: {{ .Values.app.baseURL | quote }}
+  {{- end }}
+  {{- if .Values.app.apiOnly }}
+  API_ONLY: {{ .Values.app.apiOnly | quote }}
+  {{- end }}
+  {{- if .Values.disablePasswordLogin }}
+  DISABLE_PASSWORD_LOGIN: {{ .Values.disablePasswordLogin | quote }}
+  {{- end }}
+
+  SMTP_ENABLED: {{ .Values.smtp.enabled | quote }}
+  {{- if eq .Values.smtp.enabled "true" }}
+  SMTP_HOST: {{ .Values.smtp.host | quote }}
+  SMTP_PORT: {{ .Values.smtp.port | quote }}
+  SMTP_USERNAME: {{ .Values.smtp.username | quote }}
+  SMTP_FROM: {{ .Values.smtp.from | quote }}
+  {{- end }}
+
+  {{- if .Values.oauth.google.clientID }}
+  GOOGLE_CLIENT_ID: {{ .Values.oauth.google.clientID | quote }}
+  {{- end }}
+  {{- if .Values.oauth.github.clientID }}
+  GITHUB_CLIENT_ID: {{ .Values.oauth.github.clientID | quote }}
+  {{- end }}
+
+  {{- if .Values.oidc.clientID }}
+  OIDC_CLIENT_ID: {{ .Values.oidc.clientID | quote }}
+  OIDC_DISCOVERY_URL: {{ .Values.oidc.discoveryURL | quote }}
+  {{- if .Values.oidc.displayName }}
+  OIDC_DISPLAY_NAME: {{ .Values.oidc.displayName | quote }}
+  {{- end }}
+  OIDC_AUTO_CREATE_USERS: {{ .Values.oidc.autoCreateUsers | quote }}
+  {{- if .Values.oidc.orgClaim }}
+  OIDC_ORG_CLAIM: {{ .Values.oidc.orgClaim | quote }}
+  {{- end }}
+  {{- if .Values.oidc.extraScopes }}
+  OIDC_EXTRA_SCOPES: {{ .Values.oidc.extraScopes | quote }}
+  {{- end }}
+  {{- if .Values.oidc.roleClaim }}
+  OIDC_ROLE_CLAIM: {{ .Values.oidc.roleClaim | quote }}
+  {{- end }}
+  {{- if .Values.oidc.roleMap }}
+  OIDC_ROLE_MAP: {{ .Values.oidc.roleMap | quote }}
+  {{- end }}
+  {{- if .Values.oidc.authURL }}
+  OIDC_AUTH_URL: {{ .Values.oidc.authURL | quote }}
+  OIDC_TOKEN_URL: {{ .Values.oidc.tokenURL | quote }}
+  OIDC_USER_INFO_URL: {{ .Values.oidc.userInfoURL | quote }}
+  {{- end }}
+  {{- end }}

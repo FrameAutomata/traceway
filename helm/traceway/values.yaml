@@ -1,0 +1,155 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/tracewayapp/traceway
+  pullPolicy: IfNotPresent
+  # Overrides the image tag. Defaults to "<appVersion>-minimal" (or "<appVersion>-sqlite" when variant=sqlite).
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: traceway.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources: {}
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Deployment variant: "minimal" (external ClickHouse + PostgreSQL) or "sqlite" (embedded SQLite).
+# The "minimal" variant is recommended for production Kubernetes deployments.
+variant: minimal
+
+# Core application settings
+app:
+  # Required. JWT signing secret (minimum 32 characters).
+  jwtSecret: ""
+  # Optional. Base URL used in password reset emails, e.g. "https://traceway.example.com"
+  baseURL: ""
+  # Optional. Set to "true" to serve only the API without the embedded frontend.
+  apiOnly: ""
+
+# ClickHouse configuration — required when variant=minimal
+clickhouse:
+  server: ""           # e.g. "clickhouse.default.svc.cluster.local:9000"
+  database: "traceway"
+  username: "default"
+  password: ""
+  tls: "false"
+
+# PostgreSQL configuration — required when variant=minimal
+postgres:
+  host: ""             # e.g. "postgres.default.svc.cluster.local"
+  port: "5432"
+  database: "traceway"
+  username: "traceway"
+  password: ""
+  sslmode: "disable"
+
+# SQLite configuration — only used when variant=sqlite
+sqlite:
+  path: "/data/traceway.db"
+  retentionDays: "30"
+
+# Session recording storage
+storage:
+  type: "local"   # "local" or "s3"
+  path: "/data"
+  s3:
+    bucket: ""
+    region: ""
+    accessKey: ""
+    secretKey: ""
+    endpoint: ""   # Leave empty for AWS S3; set for MinIO or other S3-compatible stores
+
+sessionRecording:
+  retentionDays: "30"
+  uploadWorkers: "32"
+  uploadQueueSize: "2048"
+
+# SMTP — optional, enables password reset emails
+smtp:
+  enabled: "false"
+  host: ""
+  port: "587"
+  username: ""
+  password: ""
+  from: ""
+
+# OAuth — optional social login
+oauth:
+  google:
+    clientID: ""
+    clientSecret: ""
+  github:
+    clientID: ""
+    clientSecret: ""
+  sessionSecret: ""
+
+# OIDC — optional single sign-on
+oidc:
+  clientID: ""
+  clientSecret: ""
+  discoveryURL: ""
+  displayName: ""
+  autoCreateUsers: "false"
+  orgClaim: ""
+  extraScopes: ""
+  roleClaim: ""
+  roleMap: ""
+  authURL: ""
+  tokenURL: ""
+  userInfoURL: ""
+
+# Set to "true" to disable username/password login (use with OIDC/OAuth only)
+disablePasswordLogin: "false"
+
+# Persistent volume for local session recordings and/or SQLite data.
+# Strongly recommended when variant=sqlite or storage.type=local.
+persistence:
+  enabled: false
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  existingClaim: ""
+
+# Name of an existing Kubernetes Secret containing sensitive credentials.
+# When set, the chart will NOT create its own Secret and will reference this one instead.
+# The secret must contain: JWT_SECRET, and for variant=minimal: CLICKHOUSE_PASSWORD, POSTGRES_PASSWORD.
+# Optional keys: SMTP_PASSWORD, S3_SECRET_KEY, OAUTH_SESSION_SECRET,
+#   GOOGLE_CLIENT_SECRET, GITHUB_CLIENT_SECRET, OIDC_CLIENT_SECRET.
+existingSecret: ""

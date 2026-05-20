@@ -75,9 +75,14 @@ jobs:
         working-directory: frontend
         run: npm version "${{ inputs.version }}" --no-git-tag-version
 
+      - name: Bump Helm chart version
+        run: |
+          sed -i "s/^version:.*/version: ${{ inputs.version }}/" helm/traceway/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${{ inputs.version }}\"/" helm/traceway/Chart.yaml
+
       - name: Commit version bump
         run: |
-          git add frontend/package.json frontend/package-lock.json
+          git add frontend/package.json frontend/package-lock.json helm/traceway/Chart.yaml
           git commit -m "v to ${{ inputs.version }}"
 
       - name: Install frontend dependencies

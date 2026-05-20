@@ -1,0 +1,100 @@
+name: Release Helm Chart
+
+on:
+  push:
+    tags:
+      - 'backend/v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (X.Y.Z, no v prefix)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release-helm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            TAG="${{ github.ref_name }}"
+            echo "version=${TAG#backend/v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Update chart version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          sed -i "s/^version:.*/version: ${VERSION}/" helm/traceway/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" helm/traceway/Chart.yaml
+
+      - name: Lint chart
+        run: |
+          helm lint helm/traceway \
+            --set app.jwtSecret=placeholder \
+            --set clickhouse.server=placeholder \
+            --set postgres.host=placeholder
+
+      - name: Package chart
+        run: helm package helm/traceway --destination ./chart-pkg
+
+      - name: Upload package to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if gh release view "backend/v${VERSION}" &>/dev/null; then
+            gh release upload "backend/v${VERSION}" chart-pkg/traceway-${VERSION}.tgz --clobber
+          else
+            echo "Release backend/v${VERSION} not found — skipping asset upload"
+          fi
+
+      - name: Fetch existing index
+        run: |
+          curl -sf https://charts.tracewayapp.com/index.yaml -o existing-index.yaml || true
+
+      - name: Generate index.yaml
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/backend/v${VERSION}"
+
+          if [ -f existing-index.yaml ]; then
+            helm repo index chart-pkg/ --url "${RELEASE_URL}" --merge existing-index.yaml
+          else
+            helm repo index chart-pkg/ --url "${RELEASE_URL}"
+          fi
+
+          mkdir -p deploy
+          cp chart-pkg/index.yaml deploy/
+
+      - name: Deploy index.yaml to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy deploy --project-name traceway-charts --commit-dirty=true
+
+      - name: Summary
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "### Helm Chart Released" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Version:** \`${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```sh' >> "$GITHUB_STEP_SUMMARY"
+          echo "helm repo add traceway https://charts.tracewayapp.com" >> "$GITHUB_STEP_SUMMARY"
+          echo "helm repo update" >> "$GITHUB_STEP_SUMMARY"
+          echo "helm install traceway traceway/traceway -f my-values.yaml" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

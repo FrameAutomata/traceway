@@ -1,0 +1,43 @@
+Traceway has been installed!
+
+  Variant:  {{ .Values.variant }}
+  Version:  {{ include "traceway.imageTag" . }}
+  Release:  {{ .Release.Name }}
+  Namespace: {{ .Release.Namespace }}
+
+Get the application URL:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}
+{{- end }}
+{{- else if contains "NodePort" .Values.service.type }}
+  export NODE_PORT=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "traceway.fullname" . }} -o jsonpath="{.spec.ports[0].nodePort}")
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo "http://$NODE_IP:$NODE_PORT"
+{{- else if contains "LoadBalancer" .Values.service.type }}
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "traceway.fullname" . }} --template "{{ "{{" }} range (index .status.loadBalancer.ingress 0) {{ "}}" }}{{ "{{" }} . {{ "}}" }}{{ "{{" }} end {{ "}}" }}")
+  echo "http://$SERVICE_IP"
+{{- else }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "traceway.fullname" . }} 8080:80
+  echo "Visit http://127.0.0.1:8080"
+{{- end }}
+
+Check pod status:
+  kubectl get pods --namespace {{ .Release.Namespace }} -l "{{ include "traceway.selectorLabels" . }}"
+
+{{- if eq .Values.variant "sqlite" }}
+
+NOTE: SQLite variant — set replicaCount: 1 (SQLite does not support concurrent writes).
+      Enable persistence to retain data across pod restarts:
+        persistence:
+          enabled: true
+          size: 10Gi
+{{- end }}
+
+{{- if .Values.existingSecret }}
+
+Using existing Secret: {{ .Values.existingSecret }}
+Required keys: JWT_SECRET{{ if eq .Values.variant "minimal" }}, CLICKHOUSE_PASSWORD, POSTGRES_PASSWORD{{ end }}
+Optional keys: SMTP_PASSWORD, S3_SECRET_KEY, OAUTH_SESSION_SECRET,
+               GOOGLE_CLIENT_SECRET, GITHUB_CLIENT_SECRET, OIDC_CLIENT_SECRET
+{{- end }}
