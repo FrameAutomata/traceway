@@ -50,8 +50,10 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# Deployment variant: "minimal" (external ClickHouse + PostgreSQL) or "sqlite" (embedded SQLite).
-# The "minimal" variant is recommended for production Kubernetes deployments.
+# Deployment variant:
+#   "minimal" — external ClickHouse + PostgreSQL (recommended for production)
+#   "sqlite"  — embedded SQLite, no external databases required
+#   "full"    — all-in-one image with bundled ClickHouse + PostgreSQL (supervisord)
 variant: minimal
 
 # Core application settings

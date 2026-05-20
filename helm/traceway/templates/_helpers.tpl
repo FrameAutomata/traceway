@@ -47,8 +47,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{ .Values.image.tag }}
 {{- else if eq .Values.variant "sqlite" -}}
 {{ .Chart.AppVersion }}-sqlite
-{{- else -}}
+{{- else if eq .Values.variant "minimal" -}}
 {{ .Chart.AppVersion }}-minimal
+{{- else -}}
+{{ .Chart.AppVersion }}
 {{- end -}}
 {{- end }}
 

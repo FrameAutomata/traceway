@@ -24,6 +24,7 @@ data:
   POSTGRES_USERNAME: {{ .Values.postgres.username | quote }}
   POSTGRES_SSLMODE: {{ .Values.postgres.sslmode | quote }}
   {{- end }}
+  {{- /* full variant: ClickHouse and PostgreSQL run inside the container via supervisord — no external DB config needed */}}
 
   STORAGE_TYPE: {{ .Values.storage.type | quote }}
   STORAGE_PATH: {{ .Values.storage.path | quote }}
