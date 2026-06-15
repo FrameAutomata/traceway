@@ -11,6 +11,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.6.0
 	github.com/dop251/goja v0.0.0-20260607120635-348e6bea910d
 	github.com/golang-jwt/jwt/v5 v5.3.0
+	github.com/google/pprof v0.0.0-20260604005048-7023385849c0
 	github.com/gorilla/securecookie v1.1.2
 	github.com/gorilla/sessions v1.4.0
 	github.com/lib/pq v1.10.9
