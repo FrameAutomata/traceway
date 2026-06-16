@@ -13,11 +13,6 @@ import (
 
 type profileRepository struct{}
 
-// InsertStacksAsync upserts unique stacks. INSERT OR REPLACE mirrors the
-// ClickHouse ReplacingMergeTree: re-seeing a stack refreshes last_seen rather
-// than erroring on the UNIQUE(project_id, service_name, stack_hash) constraint.
-// stack_hash is stored as a bit-reinterpreted int64 (SQLite has no uint64);
-// equality joins are unaffected.
 func (r *profileRepository) InsertStacksAsync(ctx context.Context, stacks []models.ProfileStack) error {
 	if len(stacks) == 0 {
 		return nil

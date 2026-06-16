@@ -21,7 +21,6 @@ func TestProfileRepository_InsertAndReadBack(t *testing.T) {
 	profileId := uuid.New()
 	now := time.Now().UTC().Truncate(time.Millisecond)
 
-	// A hash with the high bit set exercises the uint64<->int64 round-trip.
 	hash := uint64(0xFFFFFFFFFFFFFFF1)
 	frames := []string{"main.main", "main.work"}
 
@@ -32,7 +31,6 @@ func TestProfileRepository_InsertAndReadBack(t *testing.T) {
 	if err := ProfileRepository.InsertStacksAsync(ctx, []models.ProfileStack{stack}); err != nil {
 		t.Fatalf("InsertStacksAsync: %v", err)
 	}
-	// Re-inserting the same stack must dedup (INSERT OR REPLACE), not error or duplicate.
 	stack.LastSeen = now.Add(time.Minute)
 	if err := ProfileRepository.InsertStacksAsync(ctx, []models.ProfileStack{stack}); err != nil {
 		t.Fatalf("InsertStacksAsync (dedup): %v", err)
@@ -55,8 +53,6 @@ func TestProfileRepository_InsertAndReadBack(t *testing.T) {
 	if err := ProfileRepository.InsertProfilesAsync(ctx, []models.Profile{prof}); err != nil {
 		t.Fatalf("InsertProfilesAsync: %v", err)
 	}
-
-	// --- read back via raw SQL (query API arrives in PR3) ---
 
 	var stackCount int
 	if err := db.TelemetryDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM profiling_stacks").Scan(&stackCount); err != nil {

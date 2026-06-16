@@ -12,9 +12,6 @@ import (
 
 type profileRepository struct{}
 
-// InsertStacksAsync upserts unique symbolized stacks. The ReplacingMergeTree
-// engine (keyed by project/service/stack_hash) collapses re-seen stacks during
-// merges, so re-inserting the same stack is cheap and just refreshes last_seen.
 func (r *profileRepository) InsertStacksAsync(ctx context.Context, stacks []models.ProfileStack) error {
 	if len(stacks) == 0 {
 		return nil

@@ -6,10 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// ProfileStack is a unique, symbolized call stack stored once per (project,
-// service, stack hash). Many ProfileSample rows reference it by StackHash, which
-// is what keeps the exploded sample table small. Backed by a ReplacingMergeTree
-// in ClickHouse so re-seeing the same stack just refreshes LastSeen.
 type ProfileStack struct {
 	ProjectId   uuid.UUID `json:"projectId" ch:"project_id"`
 	ServiceName string    `json:"serviceName" ch:"service_name"`
@@ -18,13 +14,6 @@ type ProfileStack struct {
 	LastSeen    time.Time `json:"lastSeen" ch:"last_seen"`
 }
 
-// ProfileSample is one (profile, type, stack) measurement: the value summed
-// across all raw pprof samples that shared that stack within the profile. This
-// is the columnar query store — flame graphs are `sum(value) GROUP BY stack_hash`
-// over a time/service/type window, joined to ProfileStack by hash.
-//
-// Labels is empty in v1 (see profiling.Sample) — the column exists for the
-// future allowlisted, endpoint-level slicing feature.
 type ProfileSample struct {
 	ProjectId   uuid.UUID         `json:"projectId" ch:"project_id"`
 	ProfileId   uuid.UUID         `json:"profileId" ch:"profile_id"`
@@ -41,9 +30,6 @@ type ProfileSample struct {
 	SpanId      string            `json:"spanId" ch:"span_id"`
 }
 
-// Profile is slim per-(upload, type) metadata for the list/detail views. One
-// ingested pprof upload yields up to one Profile row per kept type (cpu,
-// heap_inuse, heap_alloc), sharing the same Id.
 type Profile struct {
 	Id                 uuid.UUID         `json:"id" ch:"id"`
 	ProjectId          uuid.UUID         `json:"projectId" ch:"project_id"`
