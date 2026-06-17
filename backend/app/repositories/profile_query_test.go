@@ -178,6 +178,42 @@ func TestProfileRepository_GetFlameGraph_GaugeUsesLatestPerServer(t *testing.T) 
 	}
 }
 
+func TestProfileRepository_GetFlameGraph_GaugeDedupsTiedStartTimes(t *testing.T) {
+	setupTestDB(t)
+	ctx := context.Background()
+	projectId := uuid.New()
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	from := base.Add(-time.Hour)
+	to := base.Add(time.Hour)
+
+	hashX := profiling.HashFrames([]string{"a", "b"})
+	mustInsertStacks(t, ctx,
+		models.ProfileStack{ProjectId: projectId, ServiceName: "checkout", StackHash: hashX, Stack: []string{"a", "b"}, LastSeen: base},
+	)
+
+	inuse := func(server string, start time.Time, value int64) models.ProfileSample {
+		return models.ProfileSample{
+			ProjectId: projectId, ProfileId: uuid.New(), ServiceName: "checkout",
+			Type: profiling.TypeHeapInuseSpace, Start: start, End: start,
+			StackHash: hashX, Value: value, ServerName: server,
+		}
+	}
+	mustInsertSamples(t, ctx,
+		inuse("pod-a", base, 300),
+		inuse("pod-a", base, 300),
+		inuse("pod-b", base, 50),
+	)
+
+	rows, err := ProfileRepository.GetFlameGraph(ctx, projectId, "checkout", profiling.TypeHeapInuseSpace, from, to, nil)
+	if err != nil {
+		t.Fatalf("GetFlameGraph (gauge ties): %v", err)
+	}
+	got := flameValueByStack(rows)
+	if got["a;b"] != 350 {
+		t.Errorf("gauge a;b = %d, want 350 (one pod-a snapshot 300 + pod-b 50, tied start_times must not both count)", got["a;b"])
+	}
+}
+
 func TestProfileRepository_GetSeries_CounterSumsPerBucket(t *testing.T) {
 	setupTestDB(t)
 	ctx := context.Background()

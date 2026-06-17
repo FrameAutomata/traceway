@@ -241,14 +241,14 @@ func (r *profileRepository) GetFlameGraph(ctx context.Context, projectId uuid.UU
 	var query string
 	if profiling.IsGauge(profileType) {
 		query = `WITH latest AS (
-			SELECT server_name, MAX(start_time) AS mx
+			SELECT profile_id AS pid, MAX(start_time) AS mx
 			FROM profiling_samples
 			WHERE project_id = :project_id AND type = :type AND service_name = :service
 				AND start_time >= :from AND start_time <= :to` + bareFilter + `
 			GROUP BY server_name)
 		SELECT st.stack AS stack_json, CAST(SUM(s.value) AS INTEGER) AS v
 		FROM profiling_samples s
-		JOIN latest l ON l.server_name = s.server_name AND l.mx = s.start_time
+		JOIN latest l ON l.pid = s.profile_id
 		JOIN profiling_stacks st ON st.project_id = s.project_id AND st.service_name = s.service_name AND st.stack_hash = s.stack_hash
 		WHERE s.project_id = :project_id AND s.type = :type AND s.service_name = :service
 			AND s.start_time >= :from AND s.start_time <= :to` + aliasFilter + `

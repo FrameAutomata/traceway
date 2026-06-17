@@ -85,6 +85,10 @@ func (p profileController) GetSeries(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if request.ServiceName == "" || request.Type == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "serviceName and type are required"})
+		return
+	}
 
 	points, err := repositories.ProfileRepository.GetSeries(c, projectId, request.ServiceName, request.Type, request.FromDate, request.ToDate, request.IntervalMinutes)
 	if err != nil {
@@ -109,6 +113,10 @@ func (p profileController) GetFlameGraph(c *gin.Context) {
 	var request ProfileFlameGraphRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if request.ServiceName == "" || request.Type == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "serviceName and type are required"})
 		return
 	}
 

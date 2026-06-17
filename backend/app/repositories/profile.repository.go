@@ -17,7 +17,7 @@ import (
 
 type profileRepository struct{}
 
-const profileStackDedup = `(SELECT project_id, service_name, stack_hash, any(stack) AS stack FROM profiling_stacks GROUP BY project_id, service_name, stack_hash)`
+const profileStackDedup = `(SELECT project_id, service_name, stack_hash, any(stack) AS stack FROM profiling_stacks WHERE project_id = ? AND service_name = ? GROUP BY project_id, service_name, stack_hash)`
 
 func (r *profileRepository) InsertStacksAsync(ctx context.Context, stacks []models.ProfileStack) error {
 	if len(stacks) == 0 {
@@ -184,17 +184,18 @@ func (r *profileRepository) GetFlameGraph(ctx context.Context, projectId uuid.UU
 	var args []interface{}
 	if profiling.IsGauge(profileType) {
 		query = `WITH latest AS (
-			SELECT server_name, max(start_time) AS mx FROM profiling_samples
+			SELECT argMax(profile_id, start_time) AS pid FROM profiling_samples
 			WHERE project_id = ? AND type = ? AND service_name = ? AND start_time >= ? AND start_time <= ?` + bareFilter + `
 			GROUP BY server_name)
 		SELECT st.stack, sum(s.value) AS v
 		FROM profiling_samples s
-		INNER JOIN latest l ON l.server_name = s.server_name AND l.mx = s.start_time
+		INNER JOIN latest l ON l.pid = s.profile_id
 		INNER JOIN ` + profileStackDedup + ` st ON st.project_id = s.project_id AND st.service_name = s.service_name AND st.stack_hash = s.stack_hash
 		WHERE s.project_id = ? AND s.type = ? AND s.service_name = ? AND s.start_time >= ? AND s.start_time <= ?` + aliasFilter + `
 		GROUP BY s.stack_hash, st.stack`
 		args = append(args, projectId, profileType, service, from, to)
 		args = append(args, bareArgs...)
+		args = append(args, projectId, service)
 		args = append(args, projectId, profileType, service, from, to)
 		args = append(args, aliasArgs...)
 	} else {
@@ -203,6 +204,7 @@ func (r *profileRepository) GetFlameGraph(ctx context.Context, projectId uuid.UU
 		INNER JOIN ` + profileStackDedup + ` st ON st.project_id = s.project_id AND st.service_name = s.service_name AND st.stack_hash = s.stack_hash
 		WHERE s.project_id = ? AND s.type = ? AND s.service_name = ? AND s.start_time >= ? AND s.start_time <= ?` + aliasFilter + `
 		GROUP BY s.stack_hash, st.stack`
+		args = append(args, projectId, service)
 		args = append(args, projectId, profileType, service, from, to)
 		args = append(args, aliasArgs...)
 	}
