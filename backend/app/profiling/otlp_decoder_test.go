@@ -1,6 +1,7 @@
 package profiling
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -240,6 +241,37 @@ func TestOTLPDecoder_UnsupportedTypeYieldsNoSamples(t *testing.T) {
 	out := decodeOTLPAll(t, b.build(t))
 	if got := len(flattenSamples(out)); got != 0 {
 		t.Errorf("expected 0 samples for unsupported type, got %d", got)
+	}
+}
+
+func TestOTLPDecoder_TimestampsOnlySampleCountsTimestamps(t *testing.T) {
+	b := newOTLPBuilder()
+	b.serviceName = "checkout"
+	s := b.frameStack("main.main", "main.work")
+	b.profile("cpu", "nanoseconds", 1_700_000_000_000_000_000, 1_000_000_000,
+		&profilespb.Sample{StackIndex: s, TimestampsUnixNano: []uint64{1, 2, 3}})
+
+	out := decodeOTLPAll(t, b.build(t))
+	samples := flattenSamples(out)
+	want := HashFrames([]string{"main.main", "main.work"})
+	if samples[sampleKey{TypeCPUNanos, want}] != 3 {
+		t.Errorf("value = %d, want 3 (one per timestamp when Values is empty)", samples[sampleKey{TypeCPUNanos, want}])
+	}
+}
+
+func TestOTLPDecoder_HugeDurationDoesNotGoNegative(t *testing.T) {
+	b := newOTLPBuilder()
+	b.serviceName = "checkout"
+	start := uint64(1_700_000_000_000_000_000)
+	s := b.frameStack("main.main")
+	b.profile("cpu", "nanoseconds", start, math.MaxUint64, otlpSample(s, 100))
+
+	out := decodeOTLPAll(t, b.build(t))
+	if len(out) != 1 {
+		t.Fatalf("expected 1 decoded profile, got %d", len(out))
+	}
+	if out[0].Meta.End.Before(out[0].Meta.Start) {
+		t.Errorf("end %v is before start %v on overflowing duration", out[0].Meta.End, out[0].Meta.Start)
 	}
 }
 

@@ -55,8 +55,8 @@ func decodeProfile(ctx IngestContext, serviceName string, resolver *stackResolve
 		start = time.Unix(0, int64(p.TimeUnixNano)).UTC()
 	}
 	end := start
-	if p.DurationNano > 0 {
-		end = start.Add(time.Duration(p.DurationNano))
+	if dur := int64(p.DurationNano); dur > 0 {
+		end = start.Add(time.Duration(dur))
 	}
 
 	values := make(map[uint64]int64)
@@ -67,8 +67,12 @@ func decodeProfile(ctx IngestContext, serviceName string, resolver *stackResolve
 			continue
 		}
 		var v int64
-		for _, val := range s.Values {
-			v += val
+		if len(s.Values) == 0 {
+			v = int64(len(s.TimestampsUnixNano))
+		} else {
+			for _, val := range s.Values {
+				v += val
+			}
 		}
 		if v == 0 {
 			continue
