@@ -36,9 +36,11 @@ func RegisterControllers(router *gin.RouterGroup) {
 	otelGroup.OPTIONS("/v1/traces", middleware.CORSReport)
 	otelGroup.OPTIONS("/v1/metrics", middleware.CORSReport)
 	otelGroup.OPTIONS("/v1/logs", middleware.CORSReport)
+	otelGroup.OPTIONS("/v1development/profiles", middleware.CORSReport)
 	otelGroup.POST("/v1/traces", middleware.CORSReport, middleware.UseClientAuth, otelcontrollers.OtelController.ExportTraces)
 	otelGroup.POST("/v1/metrics", middleware.CORSReport, middleware.UseClientAuth, otelcontrollers.OtelController.ExportMetrics)
 	otelGroup.POST("/v1/logs", middleware.CORSReport, middleware.UseClientAuth, otelcontrollers.OtelController.ExportLogs)
+	otelGroup.POST("/v1development/profiles", middleware.CORSReport, middleware.UseClientAuth, otelcontrollers.OtelController.ExportProfiles)
 
 	router.GET("/projects", middleware.UseAppAuth, ProjectController.ListProjects)
 	router.POST("/projects", middleware.UseAppAuth, middleware.RequireProjectAccess, middleware.RequireWriteAccess, ProjectController.CreateProject)
