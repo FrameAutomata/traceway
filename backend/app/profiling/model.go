@@ -19,6 +19,10 @@ var keptSampleTypes = map[string]string{
 	"alloc_space": TypeHeapAllocSpace,
 }
 
+func IsGauge(profileType string) bool {
+	return profileType == TypeHeapInuseSpace
+}
+
 type Stack struct {
 	Hash   uint64
 	Frames []string
