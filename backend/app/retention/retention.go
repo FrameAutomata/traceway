@@ -34,7 +34,17 @@ func Start(ctx context.Context) {
 		}
 	}
 
+	daysRetentionProfileArchive := defaultRetentionDays
+	profileRetentionDays := strings.TrimSpace(cfg.ProfileRetentionDays)
+	if profileRetentionDays != "" {
+		profileRetentionDaysInt, err := strconv.Atoi(profileRetentionDays)
+		if err == nil && profileRetentionDaysInt >= 0 {
+			daysRetentionProfileArchive = profileRetentionDaysInt
+		}
+	}
+
 	startSQLiteRetention(ctx, daysRetentionSqlite)
 	startRecordingDiskCleanup(ctx, daysRetentionRecordings)
+	startProfileArchiveDiskCleanup(ctx, daysRetentionProfileArchive)
 	startOAuthSessionsPrune(ctx)
 }

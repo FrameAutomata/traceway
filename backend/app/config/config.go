@@ -33,6 +33,9 @@ type Cfg struct {
 	SessionRecordingUploadWorkers   string
 	SessionRecordingUploadQueueSize string
 
+	ProfileArchiveRaw    string
+	ProfileRetentionDays string
+
 	SourceMapCacheMaxEntries string
 	SourceMapCacheMaxBytesMB string
 	SourceMapCacheType       string
@@ -113,6 +116,9 @@ func LoadFromEnv() *Cfg {
 		SessionRecordingRetentionDays:   os.Getenv("SESSION_RECORDING_RETENTION_DAYS"),
 		SessionRecordingUploadWorkers:   os.Getenv("SESSION_RECORDING_UPLOAD_WORKERS"),
 		SessionRecordingUploadQueueSize: os.Getenv("SESSION_RECORDING_UPLOAD_QUEUE_SIZE"),
+
+		ProfileArchiveRaw:    os.Getenv("PROFILE_ARCHIVE_RAW"),
+		ProfileRetentionDays: os.Getenv("PROFILE_RETENTION_DAYS"),
 
 		SourceMapCacheMaxEntries: os.Getenv("SOURCEMAP_CACHE_MAX_ENTRIES"),
 		SourceMapCacheMaxBytesMB: os.Getenv("SOURCEMAP_CACHE_MAX_BYTES_MB"),
