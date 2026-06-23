@@ -32,6 +32,9 @@ func RegisterControllers(router *gin.RouterGroup) {
 	router.OPTIONS("/report", middleware.CORSReport)
 	router.POST("/report", middleware.CORSReport, middleware.UseClientAuth, middleware.UseGzip, clientcontrollers.ClientController.Report)
 
+	router.OPTIONS("/profiles/ingest", middleware.CORSReport)
+	router.POST("/profiles/ingest", middleware.CORSReport, middleware.UseClientAuth, middleware.UseGzip, clientcontrollers.ProfileIngestController.Ingest)
+
 	otelGroup := router.Group("/otel")
 	otelGroup.OPTIONS("/v1/traces", middleware.CORSReport)
 	otelGroup.OPTIONS("/v1/metrics", middleware.CORSReport)
@@ -92,6 +95,10 @@ func RegisterControllers(router *gin.RouterGroup) {
 	router.POST("/sessions", middleware.UseAppAuth, middleware.RequireProjectAccess, SessionController.FindAllSessions)
 	router.POST("/sessions/:sessionId", middleware.UseAppAuth, middleware.RequireProjectAccess, SessionDetailController.GetSessionDetail)
 	router.GET("/sessions/:sessionId/recording", middleware.UseAppAuth, middleware.RequireProjectAccess, SessionDetailController.GetSessionRecording)
+
+	router.POST("/profiles/grouped", middleware.UseAppAuth, middleware.RequireProjectAccess, ProfileController.FindGroupedByService)
+	router.POST("/profiles/series", middleware.UseAppAuth, middleware.RequireProjectAccess, ProfileController.GetSeries)
+	router.POST("/profiles/flamegraph", middleware.UseAppAuth, middleware.RequireProjectAccess, ProfileController.GetFlameGraph)
 
 	router.POST("/ai-traces/grouped", middleware.UseAppAuth, middleware.RequireProjectAccess, AiTraceController.FindGroupedByTraceName)
 	router.POST("/ai-traces/trace", middleware.UseAppAuth, middleware.RequireProjectAccess, AiTraceController.FindByTraceName)
