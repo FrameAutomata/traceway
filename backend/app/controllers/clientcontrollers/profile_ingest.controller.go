@@ -75,10 +75,9 @@ func (e profileIngestController) Ingest(c *gin.Context) {
 	convertMs := float64(time.Since(convertStart).Microseconds()) / 1000.0
 
 	if key, ok := profiling.StampArchive(projectId, ingestCtx.ReceivedAt, profiles); ok {
-		raw := body
 		go func() {
 			defer traceway.Recover()
-			if err := storage.Store.Write(context.Background(), key, raw); err != nil {
+			if err := storage.Store.Write(context.Background(), key, body); err != nil {
 				traceway.CaptureException(fmt.Errorf("failed to write profile archive (key=%s): %w", key, err))
 			}
 		}()

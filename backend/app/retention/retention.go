@@ -16,35 +16,21 @@ const (
 
 func Start(ctx context.Context) {
 	cfg := config.Config
-	daysRetentionRecordings := defaultRetentionDays
-	sessionRecordingRetentionDays := strings.TrimSpace(cfg.SessionRecordingRetentionDays)
-	if sessionRecordingRetentionDays != "" {
-		sessionRecordingRetentionDaysInt, err := strconv.Atoi(sessionRecordingRetentionDays)
-		if err == nil && sessionRecordingRetentionDaysInt >= 0 {
-			daysRetentionRecordings = sessionRecordingRetentionDaysInt
-		}
-	}
 
-	daysRetentionSqlite := defaultRetentionDays
-	sqliteRetentionDays := strings.TrimSpace(cfg.SQLiteRetentionDays)
-	if sqliteRetentionDays != "" {
-		sqliteRetentionDaysInt, err := strconv.Atoi(sqliteRetentionDays)
-		if err == nil && sqliteRetentionDaysInt >= 0 {
-			daysRetentionSqlite = sqliteRetentionDaysInt
-		}
-	}
-
-	daysRetentionProfileArchive := defaultRetentionDays
-	profileRetentionDays := strings.TrimSpace(cfg.ProfileRetentionDays)
-	if profileRetentionDays != "" {
-		profileRetentionDaysInt, err := strconv.Atoi(profileRetentionDays)
-		if err == nil && profileRetentionDaysInt >= 0 {
-			daysRetentionProfileArchive = profileRetentionDaysInt
-		}
-	}
-
-	startSQLiteRetention(ctx, daysRetentionSqlite)
-	startRecordingDiskCleanup(ctx, daysRetentionRecordings)
-	startProfileArchiveDiskCleanup(ctx, daysRetentionProfileArchive)
+	startSQLiteRetention(ctx, parseRetentionDays(cfg.SQLiteRetentionDays))
+	startRecordingDiskCleanup(ctx, parseRetentionDays(cfg.SessionRecordingRetentionDays))
+	startProfileArchiveDiskCleanup(ctx, parseRetentionDays(cfg.ProfileRetentionDays))
 	startOAuthSessionsPrune(ctx)
+}
+
+func parseRetentionDays(value string) int {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return defaultRetentionDays
+	}
+	days, err := strconv.Atoi(trimmed)
+	if err != nil || days < 0 {
+		return defaultRetentionDays
+	}
+	return days
 }
