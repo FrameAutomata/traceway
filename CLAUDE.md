@@ -257,7 +257,7 @@ NOTIFICATION_POLL_SECONDS=60          # polled rule evaluation interval; minimum
 # Retention (see "Data Retention" section below)
 SQLITE_RETENTION_DAYS=30              # 0 to disable; only applies in SQLite mode
 SESSION_RECORDING_RETENTION_DAYS=30   # 0 to disable; only applies when STORAGE_TYPE=local
-PROFILE_ARCHIVE_RAW=false             # write the original pprof/OTLP bytes to object storage as a lossless archive
+PROFILE_ARCHIVE_RAW=false             # native pprof ingest only: write the original pprof bytes to object storage as a lossless archive
 PROFILE_RETENTION_DAYS=30             # 0 to disable; on-disk archive TTL, only with PROFILE_ARCHIVE_RAW + STORAGE_TYPE=local
 
 # Session recording uploads (see "Session Recording Uploader" section below)
@@ -791,7 +791,7 @@ Tables it prunes (and the column used):
 
 The DB rows in `session_recordings` are pruned by the SQLite retention worker (above) or by ClickHouse TTL — they are intentionally not coupled to the disk cleanup. Controllers that read recordings already log a non-fatal `traceway.CaptureException` when a referenced file is missing.
 
-**4. On-disk raw profile archives — `retention.Start` worker** (`backend/app/retention/profiles.go`). When `PROFILE_ARCHIVE_RAW` is enabled, the profile ingest path writes each upload's original pprof/OTLP bytes to `<STORAGE_PATH>/profiles/<projectId>/<yyyymmdd>/<id>.pprof` (recorded on `Profile.StorageKey`) as a lossless archive for download / re-ingest / PGO — off the read path. A worker walks that directory once at startup and then every hour and removes files whose `mtime` is older than the TTL, then prunes empty directories. It reuses the same generic age-based cleanup as the recordings worker (`runDirAgeCleanup` / `isSafeStorageSubdir`) and is a no-op unless `PROFILE_ARCHIVE_RAW` is on **and** `STORAGE_TYPE=local`.
+**4. On-disk raw profile archives — `retention.Start` worker** (`backend/app/retention/profiles.go`). When `PROFILE_ARCHIVE_RAW` is enabled, the **native pprof ingest path** (`/profiles/ingest`) writes each upload's original pprof bytes to `<STORAGE_PATH>/profiles/<projectId>/<yyyymmdd>/<id>.pprof` (recorded on `Profile.StorageKey`) as a lossless archive for download / re-ingest / PGO — off the read path. The OTLP endpoint does not archive (its rows carry an empty `StorageKey`). A worker walks that directory once at startup and then every hour and removes files whose `mtime` is older than the TTL, then prunes empty directories. It reuses the same generic age-based cleanup as the recordings worker (`runDirAgeCleanup` / `isSafeStorageSubdir`) and is a no-op unless `PROFILE_ARCHIVE_RAW` is on **and** `STORAGE_TYPE=local`.
 
 | Variable | Default | Notes |
 |----------|---------|-------|

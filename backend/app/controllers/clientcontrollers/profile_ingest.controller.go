@@ -72,16 +72,8 @@ func (e profileIngestController) Ingest(c *gin.Context) {
 
 	convertStart := time.Now()
 	stacks, samples, profiles := profiling.BuildRows(projectId, decoded)
+	archiveKey, archive := profiling.StampArchive(projectId, ingestCtx.ReceivedAt, profiles)
 	convertMs := float64(time.Since(convertStart).Microseconds()) / 1000.0
-
-	if key, ok := profiling.StampArchive(projectId, ingestCtx.ReceivedAt, profiles); ok {
-		go func() {
-			defer traceway.Recover()
-			if err := storage.Store.Write(context.Background(), key, body); err != nil {
-				traceway.CaptureException(fmt.Errorf("failed to write profile archive (key=%s): %w", key, err))
-			}
-		}()
-	}
 
 	insertStart := time.Now()
 	if err := repositories.ProfileRepository.InsertStacksAsync(c, stacks); err != nil {
@@ -97,6 +89,15 @@ func (e profileIngestController) Ingest(c *gin.Context) {
 		return
 	}
 	insertMs := float64(time.Since(insertStart).Microseconds()) / 1000.0
+
+	if archive {
+		go func() {
+			defer traceway.Recover()
+			if err := storage.Store.Write(context.Background(), archiveKey, body); err != nil {
+				traceway.CaptureException(fmt.Errorf("failed to write profile archive (key=%s): %w", archiveKey, err))
+			}
+		}()
+	}
 
 	monitoring.RecordIngestBatch(monitoring.SignalNative, "profiles", convertMs, insertMs, len(samples), len(body))
 
