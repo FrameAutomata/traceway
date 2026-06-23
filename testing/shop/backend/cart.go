@@ -13,6 +13,9 @@ func getCart(c *gin.Context) {
 	ctx := c.Request.Context()
 	lines := []CartLine{}
 
+	var slept int
+	_ = db.QueryRowContext(ctx, `SELECT sleep_ms(?)`, 400).Scan(&slept)
+
 	if fastPath() {
 		rows, err := db.QueryContext(ctx, `
 			SELECT ci.id, ci.product_id, p.name, p.price_cents, p.image_url, ci.qty

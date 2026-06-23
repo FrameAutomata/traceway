@@ -230,6 +230,61 @@ so a fresh event arrives, then open that issue. The same frame now reads
 
 ---
 
+## Manual click test cases
+
+Assumes the **Act 2 build** (Traceway re-added) is running and the dashboard is open. Base URL
+**http://localhost:8090**. Issue numbers are from [`BUGS.md`](./BUGS.md). Backend issues also have
+curl equivalents in [`demo-traffic.sh`](./demo-traffic.sh).
+
+| TC | Issue | Page | Click exactly | You'll see | Reliability |
+|----|-------|------|---------------|------------|-------------|
+| 1 | #1 slow products | Products | Click **Products** in the nav (or reload) a few times | Grid loads with a visible lag | ~3 of 4 loads |
+| 2 | #4 slow add-to-cart | Products | Click **Add to cart** on a few cards | Button lags on "Adding…", cart badge ticks up | ~3 of 4 |
+| 3 | **#11** quick view | Products | Click **Quick view** on any card | "<name> — No variants available" | every click |
+| 4 | #3 slow cart | Cart | Do TC2 first, then click **Cart** | Cart renders with a lag | ~3 of 4 |
+| 5 | #5 panic + **#10** | Checkout | Type `SAVE10`, click **Apply** | ~75% "Could not display coupon."; ~25% "saved 10%" | panic ~3 of 4 |
+| 6 | #5b + **#10** | Checkout | Type `FOO` (any unknown code), click **Apply** | "Could not display coupon." | every click |
+| 7 | #6 empty-cart panic | Checkout | Empty the cart, fill the form, click **Place order** | inline "request failed (500)" | ~5 of 6 (else 402) |
+| 8 | #7 slow + #8 declined | Checkout | With items, fill the form, click **Place order** | "Placing order…" ~1s, then confirmed or "declined" | slow most; decline ~1 of 6 |
+| 9 | **#9** unhandled add | Products | not a pure click — see note | button sticks on "Adding…" | n/a |
+
+Details that bite:
+
+- **TC3 / #11 is the cleanest frontend demo** — every product is missing a `variants` field, so
+  Quick view throws on every click and is captured manually. Start here.
+- **TC6 / #10 is the deterministic null-deref:** any **unknown** coupon code returns 400, which sets
+  `discount = null`, which makes the badge throw on render and the error boundary report it.
+  `EXPIRED` works too (400 "expired", no backend exception). `SAVE10` also triggers #10 but only on
+  the ~75% of applies that panic.
+- **Re-triggering #10:** once the coupon badge boundary catches once, it stays on the fallback. To
+  fire a fresh #10, leave Checkout (click **Products**) and come back, then Apply again.
+- **TC7 / #6:** "empty the cart" = Cart page → **Remove** every line, or just restart the server (the
+  in-memory DB reseeds empty). The Place-order fields are required: Name, a valid Email, a 4-digit
+  card (e.g. `Ada` / `ada@example.com` / `4242`).
+- **TC8 / #8 (declined)** is ~1 in 6, and a successful order clears the cart, so to keep trying you
+  click **Back to shop**, re-add an item, return to Checkout. Easier via `demo-traffic.sh` phase 8.
+- **#2 (product-detail N+1) has no UI path** — there is no product-detail page. Hit it with
+  `curl .../api/products/1` or `demo-traffic.sh` phase 2.
+- **TC9 / #9 is not reproducible by clicking** a seeded product (add-to-cart always 201s, so
+  `handleAdd` never rejects). Two ways to force it:
+  - *No code change:* with the Products page already loaded, stop the shop backend (Ctrl-C the
+    `:8090` process — Traceway on `:8082` stays up). Click **Add to cart**: the fetch fails, the
+    button sticks on "Adding…", and the unhandled rejection is reported. Restart with
+    `./build-and-run.sh` afterward — don't reload the page while it's down.
+  - *One-line tweak for a pure click:* in `backend/cart.go` `addToCart`, inside the `if !fastPath()`
+    block, fail a fraction of slow adds:
+    ```go
+    if !fastPath() {
+        slowJitter(150, 500)
+        if rand.IntN(3) == 0 {
+            c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("inventory check failed for product %d", req.ProductId))
+            return
+        }
+    }
+    ```
+    (ensure `"math/rand/v2"` is imported). Now a few **Add to cart** clicks reliably 500 → #9, while
+    successful adds still fill the cart.
+
 ## Reset
 
 - Back to "bugs, no observability": discard the Act 2 restores
