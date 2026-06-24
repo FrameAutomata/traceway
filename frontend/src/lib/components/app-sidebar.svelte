@@ -10,6 +10,7 @@
 		ChartNoAxesGantt,
 		FileText,
 		Film,
+		Flame,
 		Gauge,
 		ListEnd,
 		Settings,
@@ -30,7 +31,7 @@
 		external?: boolean;
 	}
 
-	const hiddenForFrontend = new Set(['Dashboard', 'Logs', 'Endpoints', 'Tasks', 'Metrics', 'AI Traces']);
+	const hiddenForFrontend = new Set(['Dashboard', 'Logs', 'Endpoints', 'Tasks', 'Profiles', 'Metrics', 'AI Traces']);
 	const hiddenForCloudflare = new Set(['Metrics']);
 	// Items that only make sense for frontend (browser) projects — dropped from
 	// the sidebar for any other framework, so a Go backend project doesn't
@@ -43,6 +44,7 @@
 		{ Icon: FileText, href: '/logs', title: 'Logs', stickyParams: ['preset', 'from', 'to'] },
 		{ Icon: Gauge, href: '/endpoints', title: 'Endpoints', stickyParams: ['preset', 'from', 'to'] },
 		{ Icon: ListEnd, href: '/tasks', title: 'Tasks', stickyParams: ['preset', 'from', 'to'] },
+		{ Icon: Flame, href: '/profiles', title: 'Profiles', stickyParams: ['preset', 'from', 'to'] },
 		{ Icon: Film, href: '/sessions', title: 'Sessions', stickyParams: ['preset', 'from', 'to'] },
 		{ Icon: Workflow, href: '/ai-traces', title: 'AI Traces', stickyParams: ['preset', 'from', 'to'] },
 		{
