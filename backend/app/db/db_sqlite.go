@@ -99,7 +99,9 @@ func openSQLite(path string, telemetry bool) (*sql.DB, error) {
 		}
 	}
 
-	if telemetry {
+	if path == ":memory:" {
+		d.SetMaxOpenConns(1)
+	} else if telemetry {
 		// WAL allows concurrent readers; SQLite still serializes writes at the
 		// file level and busy_timeout absorbs short contention windows.
 		d.SetMaxOpenConns(4)
