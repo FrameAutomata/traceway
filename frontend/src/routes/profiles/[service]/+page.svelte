@@ -12,6 +12,9 @@
 	import { projectsState } from '$lib/state/projects.svelte';
 	import PageHeader from '$lib/components/issues/page-header.svelte';
 	import FlameGraph from '$lib/components/profiles/flame-graph.svelte';
+	import ProfileLabelSelector, {
+		applyLabel
+	} from '$lib/components/profiles/profile-label-selector.svelte';
 	import { CalendarDate } from '@internationalized/date';
 	import {
 		PROFILE_TYPES,
@@ -42,6 +45,8 @@
 	let flameData = $state<FlameGraphNode | null>(null);
 	let series = $state<SeriesPoint[]>([]);
 	let totalValue = $state(0);
+	let availableLabels = $state<Record<string, string[]>>({});
+	let selectedLabels = $state<Record<string, string>>({});
 	let loading = $state(true);
 	let error = $state('');
 	let notFound = $state(false);
@@ -127,6 +132,12 @@
 
 	function handleTypeChange(type: string) {
 		activeType = type;
+		selectedLabels = {};
+		loadData(true);
+	}
+
+	function handleLabelSelect(key: string, value: string | undefined) {
+		selectedLabels = applyLabel(selectedLabels, key, value);
 		loadData(true);
 	}
 
@@ -155,20 +166,26 @@
 		};
 
 		try {
-			const [tree, points] = await Promise.all([
-				api.post('/profiles/flamegraph', body, {
-					projectId: projectsState.currentProjectId ?? undefined
-				}),
+			const [tree, points, labels] = await Promise.all([
+				api.post(
+					'/profiles/flamegraph',
+					{ ...body, labels: selectedLabels },
+					{ projectId: projectsState.currentProjectId ?? undefined }
+				),
 				api.post(
 					'/profiles/series',
 					{ ...body, intervalMinutes: intervalMinutes(fromIso, toIso) },
 					{ projectId: projectsState.currentProjectId ?? undefined }
-				)
+				),
+				api.post('/profiles/labels', body, {
+					projectId: projectsState.currentProjectId ?? undefined
+				}).catch(() => ({}))
 			]);
 
 			totalValue = tree?.value ?? 0;
 			flameData = tree?.children?.length ? tree : null;
 			series = points || [];
+			availableLabels = labels || {};
 		} catch (e: any) {
 			if (e?.status === 404) {
 				notFound = true;
@@ -225,6 +242,12 @@
 			{/each}
 		</Tabs.List>
 	</Tabs.Root>
+
+	<ProfileLabelSelector
+		labels={availableLabels}
+		selected={selectedLabels}
+		onSelect={handleLabelSelect}
+	/>
 
 	{#if loading}
 		<div class="flex items-center justify-center py-20">
