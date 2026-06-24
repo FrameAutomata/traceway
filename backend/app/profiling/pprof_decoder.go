@@ -21,6 +21,11 @@ type dedupKey struct {
 	labelHash uint64
 }
 
+type dedupValue struct {
+	value  int64
+	labels map[string]string
+}
+
 func (PprofDecoder) Decode(ctx IngestContext, payload []byte) ([]Decoded, error) {
 	p, err := profile.Parse(bytes.NewReader(payload))
 	if err != nil {
@@ -49,8 +54,7 @@ func (PprofDecoder) Decode(ctx IngestContext, payload []byte) ([]Decoded, error)
 		meta.End = meta.Start.Add(time.Duration(p.DurationNanos))
 	}
 
-	values := make(map[dedupKey]int64)
-	labels := make(map[dedupKey]map[string]string)
+	values := make(map[dedupKey]*dedupValue)
 	stacks := make(map[uint64][]string)
 
 	for _, s := range p.Sample {
@@ -66,8 +70,12 @@ func (PprofDecoder) Decode(ctx IngestContext, payload []byte) ([]Decoded, error)
 				continue
 			}
 			key := dedupKey{typ: k.typ, stackHash: hash, labelHash: labelHash}
-			values[key] += s.Value[k.index]
-			labels[key] = sampleLabels
+			agg := values[key]
+			if agg == nil {
+				agg = &dedupValue{labels: sampleLabels}
+				values[key] = agg
+			}
+			agg.value += s.Value[k.index]
 			stacks[hash] = frames
 		}
 	}
@@ -76,12 +84,12 @@ func (PprofDecoder) Decode(ctx IngestContext, payload []byte) ([]Decoded, error)
 	for hash, frames := range stacks {
 		decoded.Stacks = append(decoded.Stacks, Stack{Hash: hash, Frames: frames})
 	}
-	for key, v := range values {
+	for key, agg := range values {
 		decoded.Samples = append(decoded.Samples, Sample{
 			Type:      key.typ,
 			StackHash: key.stackHash,
-			Value:     v,
-			Labels:    labels[key],
+			Value:     agg.value,
+			Labels:    agg.labels,
 		})
 	}
 
