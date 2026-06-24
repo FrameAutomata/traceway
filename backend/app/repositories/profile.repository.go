@@ -227,6 +227,30 @@ func (r *profileRepository) GetFlameGraph(ctx context.Context, projectId uuid.UU
 	return out, nil
 }
 
+func (r *profileRepository) distinctLabelValues(ctx context.Context, projectId uuid.UUID, service, profileType, key string, from, to time.Time) ([]string, error) {
+	rows, err := chdb.Conn.Query(ctx,
+		`SELECT DISTINCT labels[?] AS v
+		FROM profiling_samples
+		WHERE project_id = ? AND type = ? AND service_name = ? AND start_time >= ? AND start_time <= ?
+			AND labels[?] != ''
+		ORDER BY v ASC`,
+		key, projectId, profileType, service, from, to, key)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var values []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		values = append(values, v)
+	}
+	return values, nil
+}
+
 func chLabelFilter(qualifier string, filters map[string]string) (string, []interface{}) {
 	if len(filters) == 0 {
 		return "", nil
