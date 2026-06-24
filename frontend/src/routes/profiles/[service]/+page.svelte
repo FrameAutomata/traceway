@@ -46,7 +46,10 @@
 	let error = $state('');
 	let notFound = $state(false);
 
-	let activeType = $state(data.type ?? defaultProfileType(PROFILE_TYPES.map((t) => t.type)));
+	const knownTypes = PROFILE_TYPES.map((t) => t.type);
+	let activeType = $state(
+		data.type && knownTypes.includes(data.type) ? data.type : defaultProfileType(knownTypes)
+	);
 
 	function getInitialRange(): { preset: string | null; from: Date; to: Date } {
 		if (data.preset && presetMinutes[data.preset]) {

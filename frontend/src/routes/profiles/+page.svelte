@@ -292,7 +292,7 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#each groups as group (group.serviceName + group.type)}
+					{#each groups as group (group.serviceName + '::' + group.type)}
 						<Table.Row
 							class="cursor-pointer hover:bg-muted/50"
 							onclick={createRowClickHandler(detailHref(group), 'preset', 'from', 'to')}

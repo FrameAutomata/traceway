@@ -42,6 +42,7 @@
 		if (!el || !data) return;
 
 		const total = data.value || 0;
+		const currentType = type;
 		const chart = flamegraph()
 			.width(width || el.clientWidth || 960)
 			.cellHeight(20)
@@ -49,7 +50,7 @@
 			.transitionDuration(200)
 			.sort(true)
 			.selfValue(false)
-			.label((d) => flameTooltipLabel(d.data.name, d.data.value, total, type));
+			.label((d) => flameTooltipLabel(d.data.name, d.data.value, total, currentType));
 
 		select(el).datum(data).call(chart);
 
