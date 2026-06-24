@@ -257,6 +257,8 @@ NOTIFICATION_POLL_SECONDS=60          # polled rule evaluation interval; minimum
 # Retention (see "Data Retention" section below)
 SQLITE_RETENTION_DAYS=30              # 0 to disable; only applies in SQLite mode
 SESSION_RECORDING_RETENTION_DAYS=30   # 0 to disable; only applies when STORAGE_TYPE=local
+PROFILE_ARCHIVE_RAW=false             # native pprof ingest only: write the original pprof bytes to object storage as a lossless archive
+PROFILE_RETENTION_DAYS=30             # 0 to disable; on-disk archive TTL, only with PROFILE_ARCHIVE_RAW + STORAGE_TYPE=local
 
 # Session recording uploads (see "Session Recording Uploader" section below)
 SESSION_RECORDING_UPLOAD_WORKERS=32   # 0 to disable uploads entirely
@@ -754,7 +756,12 @@ Retention is handled in three different ways depending on the deployment.
 | `metric_points_1m` (1-min rollup) | **30 days** | `0035_add_ttl_metric_points_1m.up.sql` |
 | `metric_points_1h` (1-hour rollup) | **1 year** | `0036_add_ttl_metric_points_1h.up.sql` |
 | `log_records` | **30 days** | `0045_create_log_records.up.sql` |
+| `profiling_samples` (the bulk) | **30 days** | `0068_add_ttl_profiling_samples.up.sql` |
+| `profiles` (slim metadata) | **30 days** | `0069_add_ttl_profiles.up.sql` |
+| `profiling_stacks` (dedup table) | **30 days** | `0070_add_ttl_profiling_stacks.up.sql` |
 | All other CH tables (`transactions`, `exception_stack_traces`, `tasks`, `spans`, `sessions`, `ai_traces`, `session_recordings`, `fired_notifications`, `archived_exceptions`, `slow_endpoints`, `endpoints`, etc.) | **No TTL — retained indefinitely** | — |
+
+The three profiling tables share a 30-day TTL keyed on each table's time column (`start_time` / `recorded_at` / `last_seen`). `profiling_stacks` is a `ReplacingMergeTree(last_seen)` dedup table, so `last_seen` is bumped on every re-ingest that references a stack — a stack only ages out once it has gone unreferenced for the full window, which is exactly when its samples have also expired, so no sample is ever left pointing at a dropped stack.
 
 **2. SQLite — `retention.Start` worker** (`backend/app/retention/sqlite.go`). In SQLite mode, neither `db.DB` nor `db.TelemetryDB` has any built-in expiry, so a background worker fires once at startup and then every hour and runs a `DELETE FROM <table> WHERE <time_column> < cutoff` against each telemetry table.
 
@@ -770,8 +777,11 @@ Tables it prunes (and the column used):
 | Telemetry | `log_records` | `timestamp` |
 | Telemetry | `sessions` | `started_at` |
 | Telemetry | `fired_notifications` | `fired_at` |
+| Telemetry | `profiling_samples` | `start_time` |
+| Telemetry | `profiles` | `recorded_at` |
+| Telemetry | `profiling_stacks` | `last_seen` |
 
-`archived_exceptions` (per-hash flags) and `slow_endpoints` (per-endpoint config) are intentionally skipped — they are not time-series data.
+`archived_exceptions` (per-hash flags) and `slow_endpoints` (per-endpoint config) are intentionally skipped — they are not time-series data. `profiling_stacks` *is* pruned (unlike those two) because it holds no user intent — it is a regenerable dedup table whose `last_seen` tracks the most recent referencing sample, so deleting expired stacks is safe.
 
 **3. On-disk session recordings — `retention.Start` worker** (`backend/app/retention/recordings.go`). Session recordings written to local disk (`STORAGE_TYPE=local`) accumulate under `<STORAGE_PATH>/recordings/`. A second worker walks that directory once at startup and then every hour and removes files whose `mtime` is older than the TTL, then prunes any directories left empty. The worker is a no-op when `STORAGE_TYPE=s3`.
 
@@ -780,6 +790,15 @@ Tables it prunes (and the column used):
 | `SESSION_RECORDING_RETENTION_DAYS` | `30` | TTL in days. Set to `0` to disable the worker. Only runs when `STORAGE_TYPE=local` (default). |
 
 The DB rows in `session_recordings` are pruned by the SQLite retention worker (above) or by ClickHouse TTL — they are intentionally not coupled to the disk cleanup. Controllers that read recordings already log a non-fatal `traceway.CaptureException` when a referenced file is missing.
+
+**4. On-disk raw profile archives — `retention.Start` worker** (`backend/app/retention/profiles.go`). When `PROFILE_ARCHIVE_RAW` is enabled, the **native pprof ingest path** (`/profiles/ingest`) writes each upload's original pprof bytes to `<STORAGE_PATH>/profiles/<projectId>/<yyyymmdd>/<id>.pprof` (recorded on `Profile.StorageKey`) as a lossless archive for download / re-ingest / PGO — off the read path. The OTLP endpoint does not archive (its rows carry an empty `StorageKey`). A worker walks that directory once at startup and then every hour and removes files whose `mtime` is older than the TTL, then prunes empty directories. It reuses the same generic age-based cleanup as the recordings worker (`runDirAgeCleanup` / `isSafeStorageSubdir`) and is a no-op unless `PROFILE_ARCHIVE_RAW` is on **and** `STORAGE_TYPE=local`.
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `PROFILE_ARCHIVE_RAW` | `false` | Master switch for the raw archive. When off, no blob is written and the disk worker does nothing. |
+| `PROFILE_RETENTION_DAYS` | `30` | TTL in days for the on-disk archive. Set to `0` to disable the disk worker. Only runs when `PROFILE_ARCHIVE_RAW` is on and `STORAGE_TYPE=local`. |
+
+The `profiles` DB rows (and their `storage_key`) are pruned by the SQLite retention worker / ClickHouse TTL above — not coupled to this disk cleanup, mirroring the session-recording split.
 
 #### Session Recording Uploader
 

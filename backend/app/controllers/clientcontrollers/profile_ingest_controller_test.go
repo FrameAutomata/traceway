@@ -4,18 +4,23 @@ package clientcontrollers
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/pprof/profile"
 	"github.com/google/uuid"
 	"github.com/tracewayapp/lit/v2"
+	"github.com/tracewayapp/traceway/backend/app/config"
 	"github.com/tracewayapp/traceway/backend/app/db"
 	"github.com/tracewayapp/traceway/backend/app/middleware"
 	"github.com/tracewayapp/traceway/backend/app/models"
+	"github.com/tracewayapp/traceway/backend/app/storage"
 	_ "modernc.org/sqlite"
 )
 
@@ -163,5 +168,92 @@ func TestProfileIngest_RejectsGarbage(t *testing.T) {
 	ProfileIngestController.Ingest(c)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 for garbage body", w.Code)
+	}
+}
+
+type fakeStore struct {
+	mu      sync.Mutex
+	written map[string][]byte
+	writes  chan string
+}
+
+func (f *fakeStore) Write(_ context.Context, key string, data []byte) error {
+	f.mu.Lock()
+	f.written[key] = append([]byte(nil), data...)
+	f.mu.Unlock()
+	f.writes <- key
+	return nil
+}
+
+func (f *fakeStore) Read(_ context.Context, _ string) ([]byte, error) { return nil, nil }
+func (f *fakeStore) Delete(_ context.Context, _ string) error         { return nil }
+
+func TestProfileIngest_ArchivesRawWhenEnabled(t *testing.T) {
+	setupProfilingDB(t)
+
+	prevCfg, prevStore := config.Config, storage.Store
+	t.Cleanup(func() { config.Config, storage.Store = prevCfg, prevStore })
+	config.Config = &config.Cfg{ProfileArchiveRaw: "true"}
+	fs := &fakeStore{written: map[string][]byte{}, writes: make(chan string, 1)}
+	storage.Store = fs
+
+	projectId := uuid.New()
+	body := cpuPprof(t)
+	c, w := newIngestContext(t, projectId, "checkout-svc", "/profiles/ingest", body)
+
+	ProfileIngestController.Ingest(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+
+	var storageKey string
+	db.TelemetryDB.QueryRow("SELECT storage_key FROM profiles LIMIT 1").Scan(&storageKey)
+	if storageKey == "" {
+		t.Fatal("storage_key not persisted on profile row when archiving enabled")
+	}
+
+	select {
+	case key := <-fs.writes:
+		if key != storageKey {
+			t.Errorf("archived under %q, but profile row points at %q", key, storageKey)
+		}
+		fs.mu.Lock()
+		got := fs.written[key]
+		fs.mu.Unlock()
+		if !bytes.Equal(got, body) {
+			t.Errorf("archived bytes (%d) != uploaded pprof body (%d)", len(got), len(body))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("raw archive write did not occur")
+	}
+}
+
+func TestProfileIngest_NoArchiveWhenDisabled(t *testing.T) {
+	setupProfilingDB(t)
+
+	prevCfg, prevStore := config.Config, storage.Store
+	t.Cleanup(func() { config.Config, storage.Store = prevCfg, prevStore })
+	config.Config = &config.Cfg{ProfileArchiveRaw: ""}
+	fs := &fakeStore{written: map[string][]byte{}, writes: make(chan string, 1)}
+	storage.Store = fs
+
+	projectId := uuid.New()
+	c, w := newIngestContext(t, projectId, "checkout-svc", "/profiles/ingest", cpuPprof(t))
+
+	ProfileIngestController.Ingest(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+
+	var storageKey string
+	db.TelemetryDB.QueryRow("SELECT storage_key FROM profiles LIMIT 1").Scan(&storageKey)
+	if storageKey != "" {
+		t.Errorf("storage_key = %q, want empty when archiving disabled", storageKey)
+	}
+
+	select {
+	case key := <-fs.writes:
+		t.Errorf("unexpected archive write to %q when archiving disabled", key)
+	case <-time.After(200 * time.Millisecond):
 	}
 }

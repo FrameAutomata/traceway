@@ -25,6 +25,9 @@ var telemetryRetentionTargets = []struct {
 	{"ai_traces", "recorded_at"},
 	{"log_records", "timestamp"},
 	{"sessions", "started_at"},
+	{"profiling_samples", "start_time"},
+	{"profiles", "recorded_at"},
+	{"profiling_stacks", "last_seen"},
 }
 
 func startSQLiteRetention(ctx context.Context, days int) {

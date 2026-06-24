@@ -1,6 +1,8 @@
 package clientcontrollers
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/tracewayapp/traceway/backend/app/monitoring"
 	"github.com/tracewayapp/traceway/backend/app/profiling"
 	"github.com/tracewayapp/traceway/backend/app/repositories"
+	"github.com/tracewayapp/traceway/backend/app/storage"
 	traceway "go.tracewayapp.com"
 )
 
@@ -69,6 +72,7 @@ func (e profileIngestController) Ingest(c *gin.Context) {
 
 	convertStart := time.Now()
 	stacks, samples, profiles := profiling.BuildRows(projectId, decoded)
+	archiveKey, archive := profiling.StampArchive(projectId, ingestCtx.ReceivedAt, profiles)
 	convertMs := float64(time.Since(convertStart).Microseconds()) / 1000.0
 
 	insertStart := time.Now()
@@ -85,6 +89,15 @@ func (e profileIngestController) Ingest(c *gin.Context) {
 		return
 	}
 	insertMs := float64(time.Since(insertStart).Microseconds()) / 1000.0
+
+	if archive {
+		go func() {
+			defer traceway.Recover()
+			if err := storage.Store.Write(context.Background(), archiveKey, body); err != nil {
+				traceway.CaptureException(fmt.Errorf("failed to write profile archive (key=%s): %w", archiveKey, err))
+			}
+		}()
+	}
 
 	monitoring.RecordIngestBatch(monitoring.SignalNative, "profiles", convertMs, insertMs, len(samples), len(body))
 

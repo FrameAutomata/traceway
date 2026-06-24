@@ -130,6 +130,43 @@ func TestRunSQLiteRetention_AlreadyCancelledContextIsNoOp(t *testing.T) {
 	assertCount(t, db.TelemetryDB, "endpoints", 1)
 }
 
+func TestRunSQLiteRetention_PrunesProfilingTables(t *testing.T) {
+	setupRetentionTestDB(t)
+
+	profilingTables := []struct {
+		table  string
+		column string
+	}{
+		{"profiling_samples", "start_time"},
+		{"profiles", "recorded_at"},
+		{"profiling_stacks", "last_seen"},
+	}
+	for _, pt := range profilingTables {
+		ddl := fmt.Sprintf(
+			"CREATE TABLE IF NOT EXISTS %s (id TEXT, project_id TEXT, %s DATETIME NOT NULL)",
+			pt.table, pt.column,
+		)
+		if _, err := db.TelemetryDB.Exec(ddl); err != nil {
+			t.Fatalf("create %s: %v", pt.table, err)
+		}
+	}
+
+	now := time.Now().UTC()
+	old := now.AddDate(0, 0, -45)
+	fresh := now.AddDate(0, 0, -5)
+
+	for _, pt := range profilingTables {
+		insertWithTime(t, db.TelemetryDB, pt.table, pt.column, old)
+		insertWithTime(t, db.TelemetryDB, pt.table, pt.column, fresh)
+	}
+
+	runSQLiteRetention(context.Background(), 30)
+
+	for _, pt := range profilingTables {
+		assertCount(t, db.TelemetryDB, pt.table, 1)
+	}
+}
+
 func assertCount(t *testing.T, ex *sql.DB, table string, want int) {
 	t.Helper()
 	if got := countRows(t, ex, table); got != want {
