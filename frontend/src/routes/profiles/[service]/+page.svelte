@@ -179,7 +179,7 @@
 				),
 				api.post('/profiles/labels', body, {
 					projectId: projectsState.currentProjectId ?? undefined
-				})
+				}).catch(() => ({}))
 			]);
 
 			totalValue = tree?.value ?? 0;
