@@ -15,6 +15,12 @@ type sampleKey struct {
 	stackHash uint64
 }
 
+type dedupKey struct {
+	typ       string
+	stackHash uint64
+	labelHash uint64
+}
+
 func (PprofDecoder) Decode(ctx IngestContext, payload []byte) ([]Decoded, error) {
 	p, err := profile.Parse(bytes.NewReader(payload))
 	if err != nil {
@@ -43,7 +49,8 @@ func (PprofDecoder) Decode(ctx IngestContext, payload []byte) ([]Decoded, error)
 		meta.End = meta.Start.Add(time.Duration(p.DurationNanos))
 	}
 
-	values := make(map[sampleKey]int64)
+	values := make(map[dedupKey]int64)
+	labels := make(map[dedupKey]map[string]string)
 	stacks := make(map[uint64][]string)
 
 	for _, s := range p.Sample {
@@ -52,11 +59,15 @@ func (PprofDecoder) Decode(ctx IngestContext, payload []byte) ([]Decoded, error)
 			continue
 		}
 		hash := HashFrames(frames)
+		sampleLabels := allowlistedLabels(s.Label)
+		labelHash := labelFingerprint(sampleLabels)
 		for _, k := range kept {
 			if k.index >= len(s.Value) || s.Value[k.index] == 0 {
 				continue
 			}
-			values[sampleKey{typ: k.typ, stackHash: hash}] += s.Value[k.index]
+			key := dedupKey{typ: k.typ, stackHash: hash, labelHash: labelHash}
+			values[key] += s.Value[k.index]
+			labels[key] = sampleLabels
 			stacks[hash] = frames
 		}
 	}
@@ -70,6 +81,7 @@ func (PprofDecoder) Decode(ctx IngestContext, payload []byte) ([]Decoded, error)
 			Type:      key.typ,
 			StackHash: key.stackHash,
 			Value:     v,
+			Labels:    labels[key],
 		})
 	}
 

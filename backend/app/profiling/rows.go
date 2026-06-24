@@ -66,6 +66,7 @@ func BuildRows(projectId uuid.UUID, decoded []Decoded) ([]models.ProfileStack, [
 				End:         d.Meta.End,
 				StackHash:   s.StackHash,
 				Value:       s.Value,
+				Labels:      s.Labels,
 				ServerName:  d.Meta.ServerName,
 				AppVersion:  d.Meta.AppVersion,
 				TraceId:     traceId,
