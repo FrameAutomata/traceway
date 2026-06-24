@@ -73,5 +73,21 @@ func runSQLiteRetention(ctx context.Context, days int) {
 				traceway.CaptureException(fmt.Errorf("retention: delete from telemetry.%s failed: %w", tgt.table, err))
 			}
 		}
+		reclaimTelemetryDisk(ctx)
+	}
+}
+
+func reclaimTelemetryDisk(ctx context.Context) {
+	for _, stmt := range []string{
+		"PRAGMA incremental_vacuum",
+		"PRAGMA optimize",
+		"PRAGMA wal_checkpoint(TRUNCATE)",
+	} {
+		if ctx.Err() != nil {
+			return
+		}
+		if _, err := db.TelemetryDB.ExecContext(ctx, stmt); err != nil {
+			traceway.CaptureException(fmt.Errorf("retention: telemetry maintenance %q failed: %w", stmt, err))
+		}
 	}
 }

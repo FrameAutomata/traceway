@@ -6,6 +6,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -164,6 +166,56 @@ func TestRunSQLiteRetention_PrunesProfilingTables(t *testing.T) {
 
 	for _, pt := range profilingTables {
 		assertCount(t, db.TelemetryDB, pt.table, 1)
+	}
+}
+
+func TestRunSQLiteRetention_TruncatesWALAfterPass(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "telemetry.db")
+	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=auto_vacuum(incremental)&_pragma=wal_autocheckpoint(1000000)"
+
+	telDB, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("open telemetry: %v", err)
+	}
+	telDB.SetMaxOpenConns(1)
+	if err := telDB.Ping(); err != nil {
+		t.Fatalf("ping telemetry: %v", err)
+	}
+
+	for _, tgt := range telemetryRetentionTargets {
+		ddl := fmt.Sprintf("CREATE TABLE %s (id TEXT, project_id TEXT, %s DATETIME NOT NULL)", tgt.table, tgt.column)
+		if _, err := telDB.Exec(ddl); err != nil {
+			t.Fatalf("ddl %s: %v", tgt.table, err)
+		}
+	}
+
+	prevTelDB, prevDriver := db.TelemetryDB, db.Driver
+	db.TelemetryDB = telDB
+	db.Driver = lit.SQLite
+	t.Cleanup(func() {
+		telDB.Close()
+		db.TelemetryDB = prevTelDB
+		db.Driver = prevDriver
+	})
+
+	old := time.Now().UTC().AddDate(0, 0, -45)
+	for range 2000 {
+		insertWithTime(t, telDB, "endpoints", "recorded_at", old)
+	}
+
+	walPath := path + "-wal"
+	info, err := os.Stat(walPath)
+	if err != nil || info.Size() == 0 {
+		t.Fatalf("expected WAL to grow before retention (err=%v)", err)
+	}
+
+	runSQLiteRetention(context.Background(), 30)
+
+	assertCount(t, telDB, "endpoints", 0)
+
+	if info, err := os.Stat(walPath); err == nil && info.Size() > 0 {
+		t.Errorf("expected WAL truncated to 0 after retention, got %d bytes", info.Size())
 	}
 }
 
