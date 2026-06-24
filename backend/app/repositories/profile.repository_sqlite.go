@@ -25,9 +25,14 @@ type profileGroupRow struct {
 	LastSeen     SQLiteTime `lit:"last_seen"`
 }
 
+type labelValueRow struct {
+	Value string `lit:"v"`
+}
+
 func init() {
 	models.ExtensionModelRegistrations = append(models.ExtensionModelRegistrations, func(driver lit.Driver) {
 		lit.RegisterModel[profileGroupRow](driver)
+		lit.RegisterModel[labelValueRow](driver)
 	})
 }
 
@@ -289,11 +294,6 @@ func (r *profileRepository) GetFlameGraph(ctx context.Context, projectId uuid.UU
 }
 
 func (r *profileRepository) distinctLabelValues(ctx context.Context, projectId uuid.UUID, service, profileType, key string, from, to time.Time) ([]string, error) {
-	type labelValueRow struct {
-		Value string `lit:"v"`
-	}
-	lit.RegisterModel[labelValueRow](db.Driver)
-
 	results, err := lit.SelectNamed[labelValueRow](db.TelemetryDB,
 		`SELECT DISTINCT json_extract(labels, '$.' || :key) AS v
 		FROM profiling_samples
