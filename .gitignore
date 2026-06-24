@@ -18,6 +18,10 @@ coverage.*
 *.coverprofile
 profile.cov
 
+# Generated pprof profiles (e.g. backend/tools/genpprof output)
+*.pprof
+*.pprof.gz
+
 # Dependency directories (remove the comment below to include it)
 # vendor/
 

@@ -2,6 +2,7 @@ package profiling
 
 import (
 	"hash/fnv"
+	"sort"
 	"time"
 )
 
@@ -17,6 +18,12 @@ var keptSampleTypes = map[string]string{
 	"alloc_space": TypeHeapAllocSpace,
 }
 
+const LabelEndpoint = "endpoint"
+
+var allowedLabels = map[string]struct{}{
+	LabelEndpoint: {},
+}
+
 func IsGauge(profileType string) bool {
 	return profileType == TypeHeapInuseSpace
 }
@@ -30,6 +37,7 @@ type Sample struct {
 	Type      string
 	StackHash uint64
 	Value     int64
+	Labels    map[string]string
 }
 
 type Meta struct {
@@ -53,6 +61,42 @@ func HashFrames(frames []string) uint64 {
 	h := fnv.New64a()
 	for _, f := range frames {
 		_, _ = h.Write([]byte(f))
+		_, _ = h.Write([]byte{0})
+	}
+	return h.Sum64()
+}
+
+func allowlistedLabels(raw map[string][]string) map[string]string {
+	var out map[string]string
+	for k, v := range raw {
+		if _, ok := allowedLabels[k]; !ok {
+			continue
+		}
+		if len(v) == 0 {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]string)
+		}
+		out[k] = v[0]
+	}
+	return out
+}
+
+func labelFingerprint(labels map[string]string) uint64 {
+	if len(labels) == 0 {
+		return 0
+	}
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	h := fnv.New64a()
+	for _, k := range keys {
+		_, _ = h.Write([]byte(k))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(labels[k]))
 		_, _ = h.Write([]byte{0})
 	}
 	return h.Sum64()
