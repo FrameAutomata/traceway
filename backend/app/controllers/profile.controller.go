@@ -38,6 +38,13 @@ type ProfileFlameGraphRequest struct {
 	Labels      map[string]string `json:"labels"`
 }
 
+type ProfileLabelsRequest struct {
+	FromDate    time.Time `json:"fromDate"`
+	ToDate      time.Time `json:"toDate"`
+	ServiceName string    `json:"serviceName"`
+	Type        string    `json:"type"`
+}
+
 type ProfileSeriesPoint struct {
 	Timestamp time.Time `json:"timestamp"`
 	Value     float64   `json:"value"`
@@ -127,6 +134,32 @@ func (p profileController) GetFlameGraph(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, services.FoldFlameGraph(rows))
+}
+
+func (p profileController) DiscoverLabels(c *gin.Context) {
+	projectId, err := middleware.GetProjectId(c)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("RequireProjectAccess middleware must be applied: %w", err))
+		return
+	}
+
+	var request ProfileLabelsRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if request.ServiceName == "" || request.Type == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "serviceName and type are required"})
+		return
+	}
+
+	labels, err := repositories.ProfileRepository.DiscoverLabels(c, projectId, request.ServiceName, request.Type, request.FromDate, request.ToDate)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("error discovering profile labels: %w", err))
+		return
+	}
+
+	c.JSON(http.StatusOK, labels)
 }
 
 var ProfileController = profileController{}

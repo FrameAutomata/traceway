@@ -25,9 +25,14 @@ type profileGroupRow struct {
 	LastSeen     SQLiteTime `lit:"last_seen"`
 }
 
+type labelValueRow struct {
+	Value string `lit:"v"`
+}
+
 func init() {
 	models.ExtensionModelRegistrations = append(models.ExtensionModelRegistrations, func(driver lit.Driver) {
 		lit.RegisterModel[profileGroupRow](driver)
+		lit.RegisterModel[labelValueRow](driver)
 	})
 }
 
@@ -286,6 +291,27 @@ func (r *profileRepository) GetFlameGraph(ctx context.Context, projectId uuid.UU
 		out = append(out, models.ProfileStackValue{Stack: frames, Value: value})
 	}
 	return out, sqlRows.Err()
+}
+
+func (r *profileRepository) distinctLabelValues(ctx context.Context, projectId uuid.UUID, service, profileType, key string, from, to time.Time) ([]string, error) {
+	results, err := lit.SelectNamed[labelValueRow](db.TelemetryDB,
+		`SELECT DISTINCT json_extract(labels, '$.' || :key) AS v
+		FROM profiling_samples
+		WHERE project_id = :project_id AND type = :type AND service_name = :service
+			AND start_time >= :from AND start_time <= :to
+			AND json_extract(labels, '$.' || :key) IS NOT NULL
+			AND json_extract(labels, '$.' || :key) != ''
+		ORDER BY v ASC`,
+		lit.P{"project_id": projectId, "type": profileType, "service": service, "key": key, "from": NewSQLiteTime(from), "to": NewSQLiteTime(to)})
+	if err != nil {
+		return nil, err
+	}
+
+	values := make([]string, 0, len(results))
+	for _, row := range results {
+		values = append(values, row.Value)
+	}
+	return values, nil
 }
 
 func sqliteLabelFilter(qualifier string, filters map[string]string, params lit.P) string {
