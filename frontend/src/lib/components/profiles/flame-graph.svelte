@@ -11,18 +11,29 @@
 		const pctStr = Number(pct.toFixed(1)).toString();
 		return `${name} — ${formatProfileValue(type, value)} (${pctStr}%)`;
 	}
+
+	export function flameDiffTooltipLabel(
+		name: string,
+		left: number,
+		right: number,
+		type: string
+	): string {
+		return `${name} — ${formatProfileValue(type, left)} → ${formatProfileValue(type, right)}`;
+	}
 </script>
 
 <script lang="ts">
 	import flamegraph, { type FlameGraphNode } from 'd3-flame-graph';
 	import { select } from 'd3-selection';
+	import { diffColor, type FlameDiffNode } from '$lib/utils/profile-diff';
 
 	interface Props {
-		data: FlameGraphNode | null;
+		data: FlameGraphNode | FlameDiffNode | null;
 		type: string;
+		differential?: boolean;
 	}
 
-	let { data, type }: Props = $props();
+	let { data, type, differential = false }: Props = $props();
 
 	let container = $state<HTMLDivElement>();
 	let width = $state(0);
@@ -49,8 +60,19 @@
 			.minFrameSize(1)
 			.transitionDuration(200)
 			.sort(true)
-			.selfValue(false)
-			.label((d) => flameTooltipLabel(d.data.name, d.data.value, total, currentType));
+			.selfValue(false);
+
+		if (differential) {
+			const diffOf = (d: unknown) => (d as { data: FlameDiffNode }).data;
+			chart
+				.setColorMapper((d) => diffColor(diffOf(d).delta))
+				.label((d) => {
+					const n = diffOf(d);
+					return flameDiffTooltipLabel(n.name, n.left, n.right, currentType);
+				});
+		} else {
+			chart.label((d) => flameTooltipLabel(d.data.name, d.data.value, total, currentType));
+		}
 
 		select(el).datum(data).call(chart);
 

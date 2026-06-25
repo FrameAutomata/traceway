@@ -12,6 +12,7 @@
 	import { projectsState } from '$lib/state/projects.svelte';
 	import PageHeader from '$lib/components/issues/page-header.svelte';
 	import FlameGraph from '$lib/components/profiles/flame-graph.svelte';
+	import { diffToFlameNode, type DiffNode, type FlameDiffNode } from '$lib/utils/profile-diff';
 	import ProfileLabelSelector, {
 		applyLabel
 	} from '$lib/components/profiles/profile-label-selector.svelte';
@@ -43,10 +44,14 @@
 	let { data } = $props();
 
 	let flameData = $state<FlameGraphNode | null>(null);
+	let diffData = $state<FlameDiffNode | null>(null);
+	let compareMode = $state(false);
 	let series = $state<SeriesPoint[]>([]);
 	let totalValue = $state(0);
 	let availableLabels = $state<Record<string, string[]>>({});
 	let selectedLabels = $state<Record<string, string>>({});
+	let baseAvailableLabels = $state<Record<string, string[]>>({});
+	let baseSelectedLabels = $state<Record<string, string>>({});
 	let loading = $state(true);
 	let error = $state('');
 	let notFound = $state(false);
@@ -80,6 +85,13 @@
 	let fromTime = $state(dateToTimeString(initialRange.from, timezone));
 	let toTime = $state(dateToTimeString(initialRange.to, timezone));
 
+	const baseInit = getTimeRangeFromPreset('24h', timezone);
+	let basePreset = $state<string | null>('24h');
+	let baseFromDate = $state<CalendarDate>(dateToCalendarDate(baseInit.from, timezone));
+	let baseToDate = $state<CalendarDate>(dateToCalendarDate(baseInit.to, timezone));
+	let baseFromTime = $state(dateToTimeString(baseInit.from, timezone));
+	let baseToTime = $state(dateToTimeString(baseInit.to, timezone));
+
 	const activeMeta = $derived<ProfileTypeMeta | undefined>(getProfileTypeMeta(activeType));
 	const seriesPeak = $derived(series.reduce((max, p) => Math.max(max, p.value), 0));
 
@@ -109,6 +121,42 @@
 		return toUTCISO(dt);
 	}
 
+	function baseFromDateTimeUTC(): string {
+		const [hour, minute] = (baseFromTime || '00:00').split(':').map(Number);
+		const dt = calendarDateTimeToLuxon(
+			{ year: baseFromDate.year, month: baseFromDate.month, day: baseFromDate.day, hour, minute },
+			timezone
+		);
+		return toUTCISO(dt);
+	}
+
+	function baseToDateTimeUTC(): string {
+		const [hour, minute] = (baseToTime || '23:59').split(':').map(Number);
+		const dt = calendarDateTimeToLuxon(
+			{ year: baseToDate.year, month: baseToDate.month, day: baseToDate.day, hour, minute },
+			timezone
+		).endOf('minute');
+		return toUTCISO(dt);
+	}
+
+	function toggleCompare() {
+		compareMode = !compareMode;
+		loadData(true);
+	}
+
+	function handleBaseRangeChange(
+		from: { date: CalendarDate; time: string },
+		to: { date: CalendarDate; time: string },
+		preset: string | null
+	) {
+		baseFromDate = from.date;
+		baseFromTime = from.time;
+		baseToDate = to.date;
+		baseToTime = to.time;
+		basePreset = preset;
+		loadData(true);
+	}
+
 	function intervalMinutes(fromIso: string, toIso: string): number {
 		const spanMinutes = Math.max(
 			1,
@@ -133,11 +181,17 @@
 	function handleTypeChange(type: string) {
 		activeType = type;
 		selectedLabels = {};
+		baseSelectedLabels = {};
 		loadData(true);
 	}
 
 	function handleLabelSelect(key: string, value: string | undefined) {
 		selectedLabels = applyLabel(selectedLabels, key, value);
+		loadData(true);
+	}
+
+	function handleBaseLabelSelect(key: string, value: string | undefined) {
+		baseSelectedLabels = applyLabel(baseSelectedLabels, key, value);
 		loadData(true);
 	}
 
@@ -166,26 +220,56 @@
 		};
 
 		try {
-			const [tree, points, labels] = await Promise.all([
-				api.post(
-					'/profiles/flamegraph',
-					{ ...body, labels: selectedLabels },
-					{ projectId: projectsState.currentProjectId ?? undefined }
-				),
+			const projectId = projectsState.currentProjectId ?? undefined;
+			const discoverLabels = (from: string, to: string) =>
+				api
+					.post(
+						'/profiles/labels',
+						{ fromDate: from, toDate: to, serviceName: data.service, type: activeType },
+						{ projectId }
+					)
+					.catch(() => ({}));
+			const flamePromise = compareMode
+				? api.post(
+						'/profiles/flamegraph/diff',
+						{
+							serviceName: data.service,
+							type: activeType,
+							left: {
+								fromDate: baseFromDateTimeUTC(),
+								toDate: baseToDateTimeUTC(),
+								labels: baseSelectedLabels
+							},
+							right: { fromDate: fromIso, toDate: toIso, labels: selectedLabels }
+						},
+						{ projectId }
+					)
+				: api.post('/profiles/flamegraph', { ...body, labels: selectedLabels }, { projectId });
+
+			const [tree, points, labels, baseLabels] = await Promise.all([
+				flamePromise,
 				api.post(
 					'/profiles/series',
 					{ ...body, intervalMinutes: intervalMinutes(fromIso, toIso) },
-					{ projectId: projectsState.currentProjectId ?? undefined }
+					{ projectId }
 				),
-				api.post('/profiles/labels', body, {
-					projectId: projectsState.currentProjectId ?? undefined
-				}).catch(() => ({}))
+				discoverLabels(fromIso, toIso),
+				compareMode ? discoverLabels(baseFromDateTimeUTC(), baseToDateTimeUTC()) : Promise.resolve({})
 			]);
 
-			totalValue = tree?.value ?? 0;
-			flameData = tree?.children?.length ? tree : null;
+			if (compareMode) {
+				const root = diffToFlameNode(tree as DiffNode);
+				diffData = root.children.length ? root : null;
+				flameData = null;
+				totalValue = (tree as DiffNode)?.right ?? 0;
+			} else {
+				flameData = tree?.children?.length ? tree : null;
+				diffData = null;
+				totalValue = tree?.value ?? 0;
+			}
 			series = points || [];
 			availableLabels = labels || {};
+			baseAvailableLabels = baseLabels || {};
 		} catch (e: any) {
 			if (e?.status === 404) {
 				notFound = true;
@@ -223,15 +307,33 @@
 			<PageHeader title={data.service} subtitle="Profiles" />
 		</div>
 
-		<div class="flex flex-col">
-			<TimeRangePicker
-				bind:fromDate
-				bind:toDate
-				bind:fromTime
-				bind:toTime
-				bind:preset={selectedPreset}
-				onApply={handleTimeRangeChange}
-			/>
+		<div class="flex flex-col items-end gap-2">
+			<div class="flex items-center gap-2">
+				<Button variant={compareMode ? 'default' : 'outline'} size="sm" onclick={toggleCompare}>
+					Compare
+				</Button>
+				<TimeRangePicker
+					bind:fromDate
+					bind:toDate
+					bind:fromTime
+					bind:toTime
+					bind:preset={selectedPreset}
+					onApply={handleTimeRangeChange}
+				/>
+			</div>
+			{#if compareMode}
+				<div class="flex items-center gap-2">
+					<span class="text-xs whitespace-nowrap text-muted-foreground">Baseline</span>
+					<TimeRangePicker
+						bind:fromDate={baseFromDate}
+						bind:toDate={baseToDate}
+						bind:fromTime={baseFromTime}
+						bind:toTime={baseToTime}
+						bind:preset={basePreset}
+						onApply={handleBaseRangeChange}
+					/>
+				</div>
+			{/if}
 		</div>
 	</div>
 
@@ -243,11 +345,32 @@
 		</Tabs.List>
 	</Tabs.Root>
 
-	<ProfileLabelSelector
-		labels={availableLabels}
-		selected={selectedLabels}
-		onSelect={handleLabelSelect}
-	/>
+	{#if compareMode}
+		<div class="space-y-2">
+			<div class="flex items-center gap-2">
+				<span class="w-16 shrink-0 text-xs text-muted-foreground">Current</span>
+				<ProfileLabelSelector
+					labels={availableLabels}
+					selected={selectedLabels}
+					onSelect={handleLabelSelect}
+				/>
+			</div>
+			<div class="flex items-center gap-2">
+				<span class="w-16 shrink-0 text-xs text-muted-foreground">Baseline</span>
+				<ProfileLabelSelector
+					labels={baseAvailableLabels}
+					selected={baseSelectedLabels}
+					onSelect={handleBaseLabelSelect}
+				/>
+			</div>
+		</div>
+	{:else}
+		<ProfileLabelSelector
+			labels={availableLabels}
+			selected={selectedLabels}
+			onSelect={handleLabelSelect}
+		/>
+	{/if}
 
 	{#if loading}
 		<div class="flex items-center justify-center py-20">
@@ -299,7 +422,22 @@
 		</div>
 
 		<div class="rounded-lg border p-4">
-			<FlameGraph data={flameData} type={activeType} />
+			{#if compareMode}
+				<div class="mb-3 flex items-center gap-4 text-xs text-muted-foreground">
+					<span class="flex items-center gap-1">
+						<span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: rgb(191, 78, 78)"
+						></span> heavier now
+					</span>
+					<span class="flex items-center gap-1">
+						<span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: rgb(78, 191, 78)"
+						></span> lighter now
+					</span>
+					<span>(baseline → current)</span>
+				</div>
+				<FlameGraph data={diffData} type={activeType} differential />
+			{:else}
+				<FlameGraph data={flameData} type={activeType} />
+			{/if}
 		</div>
 	{/if}
 </div>

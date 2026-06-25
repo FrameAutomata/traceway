@@ -20,7 +20,7 @@ vi.mock('d3-selection', () => {
 	return { select: () => sel };
 });
 
-import FlameGraph, { flameTooltipLabel } from './flame-graph.svelte';
+import FlameGraph, { flameTooltipLabel, flameDiffTooltipLabel } from './flame-graph.svelte';
 import { CPU_NANOS } from '$lib/utils/profile-format';
 
 const tree = {
@@ -39,6 +39,14 @@ describe('flameTooltipLabel', () => {
 
 	it('renders 0% instead of NaN when the total is zero', () => {
 		expect(flameTooltipLabel('main.work', 10, 0, CPU_NANOS)).toBe('main.work — 10 ns (0%)');
+	});
+});
+
+describe('flameDiffTooltipLabel', () => {
+	it('formats baseline → comparison values', () => {
+		expect(flameDiffTooltipLabel('main.work', 1_000_000, 1_500_000, CPU_NANOS)).toBe(
+			'main.work — 1 ms → 1.5 ms'
+		);
 	});
 });
 
@@ -66,5 +74,12 @@ describe('FlameGraph component', () => {
 		const next = { name: 'root', value: 50, self: 0, children: [] };
 		await rerender({ data: next, type: CPU_NANOS });
 		expect(datumSpy).toHaveBeenCalledWith(next);
+	});
+
+	it('renders a differential flame graph with the diff tree', () => {
+		const diffTree = { name: 'root', value: 250, left: 100, right: 150, delta: 0, children: [] };
+		render(FlameGraph, { props: { data: diffTree, type: CPU_NANOS, differential: true } });
+		expect(flamegraphSpy).toHaveBeenCalled();
+		expect(datumSpy).toHaveBeenCalledWith(diffTree);
 	});
 });
