@@ -38,6 +38,19 @@ type ProfileFlameGraphRequest struct {
 	Labels      map[string]string `json:"labels"`
 }
 
+type ProfileFlameGraphDiffSide struct {
+	FromDate time.Time         `json:"fromDate"`
+	ToDate   time.Time         `json:"toDate"`
+	Labels   map[string]string `json:"labels"`
+}
+
+type ProfileFlameGraphDiffRequest struct {
+	ServiceName string                    `json:"serviceName"`
+	Type        string                    `json:"type"`
+	Left        ProfileFlameGraphDiffSide `json:"left"`
+	Right       ProfileFlameGraphDiffSide `json:"right"`
+}
+
 type ProfileLabelsRequest struct {
 	FromDate    time.Time `json:"fromDate"`
 	ToDate      time.Time `json:"toDate"`
@@ -160,6 +173,37 @@ func (p profileController) DiscoverLabels(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, labels)
+}
+
+func (p profileController) GetFlameGraphDiff(c *gin.Context) {
+	projectId, err := middleware.GetProjectId(c)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("RequireProjectAccess middleware must be applied: %w", err))
+		return
+	}
+
+	var request ProfileFlameGraphDiffRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if request.ServiceName == "" || request.Type == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "serviceName and type are required"})
+		return
+	}
+
+	leftRows, err := repositories.ProfileRepository.GetFlameGraph(c, projectId, request.ServiceName, request.Type, request.Left.FromDate, request.Left.ToDate, request.Left.Labels)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("error loading baseline flame graph: %w", err))
+		return
+	}
+	rightRows, err := repositories.ProfileRepository.GetFlameGraph(c, projectId, request.ServiceName, request.Type, request.Right.FromDate, request.Right.ToDate, request.Right.Labels)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("error loading comparison flame graph: %w", err))
+		return
+	}
+
+	c.JSON(http.StatusOK, services.FoldDiff(leftRows, rightRows))
 }
 
 var ProfileController = profileController{}
