@@ -95,6 +95,9 @@
 	const activeMeta = $derived<ProfileTypeMeta | undefined>(getProfileTypeMeta(activeType));
 	const seriesPeak = $derived(series.reduce((max, p) => Math.max(max, p.value), 0));
 
+	const hasCurrentLabels = $derived(Object.keys(availableLabels).length > 0);
+	const hasBaselineLabels = $derived(Object.keys(baseAvailableLabels).length > 0);
+
 	function updateUrlParams(pushToHistory = true) {
 		const params: Record<string, string | undefined> = selectedPreset
 			? { preset: selectedPreset }
@@ -346,24 +349,30 @@
 	</Tabs.Root>
 
 	{#if compareMode}
-		<div class="space-y-2">
-			<div class="flex items-center gap-2">
-				<span class="w-16 shrink-0 text-xs text-muted-foreground">Current</span>
-				<ProfileLabelSelector
-					labels={availableLabels}
-					selected={selectedLabels}
-					onSelect={handleLabelSelect}
-				/>
+		{#if hasCurrentLabels || hasBaselineLabels}
+			<div class="space-y-2">
+				{#if hasCurrentLabels}
+					<div class="flex items-center gap-2">
+						<span class="w-16 shrink-0 text-xs text-muted-foreground">Current</span>
+						<ProfileLabelSelector
+							labels={availableLabels}
+							selected={selectedLabels}
+							onSelect={handleLabelSelect}
+						/>
+					</div>
+				{/if}
+				{#if hasBaselineLabels}
+					<div class="flex items-center gap-2">
+						<span class="w-16 shrink-0 text-xs text-muted-foreground">Baseline</span>
+						<ProfileLabelSelector
+							labels={baseAvailableLabels}
+							selected={baseSelectedLabels}
+							onSelect={handleBaseLabelSelect}
+						/>
+					</div>
+				{/if}
 			</div>
-			<div class="flex items-center gap-2">
-				<span class="w-16 shrink-0 text-xs text-muted-foreground">Baseline</span>
-				<ProfileLabelSelector
-					labels={baseAvailableLabels}
-					selected={baseSelectedLabels}
-					onSelect={handleBaseLabelSelect}
-				/>
-			</div>
-		</div>
+		{/if}
 	{:else}
 		<ProfileLabelSelector
 			labels={availableLabels}
