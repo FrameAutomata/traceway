@@ -164,10 +164,25 @@ func Run(opts ...Option) {
 	}
 
 	if monitoringTracewayUrl := cfg.MonitoringTracewayURL; monitoringTracewayUrl != "" {
-		router.Use(tracewaygin.New(
+		twmw := tracewaygin.New(
 			monitoringTracewayUrl,
 			tracewaygin.WithOnErrorRecording(tracewaygin.RecordingQuery|tracewaygin.RecordingBody|tracewaygin.RecordingHeader|tracewaygin.RecordingUrl),
-		))
+		)
+
+		selfToken := monitoringTracewayUrl
+		if i := strings.IndexByte(selfToken, '@'); i >= 0 {
+			selfToken = selfToken[:i]
+		}
+		selfAuth := "Bearer " + selfToken
+
+		router.Use(func(c *gin.Context) {
+			if c.GetHeader("Authorization") == selfAuth {
+				c.Next()
+				return
+			}
+			twmw(c)
+		})
+
 		monitoring.StartClickHouseReporter(ctx)
 		monitoring.StartBackendReporter(ctx)
 	}
