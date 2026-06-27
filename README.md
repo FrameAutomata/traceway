@@ -66,6 +66,10 @@ The [CLI](./cli) is designed for agents first: JSON when piped, tables on a TTY,
 
 The skills are plain Markdown in [`skills/`](./skills), in the same MIT-licensed repo. No marketplace, no lock-in. [Learn more →](https://tracewayapp.com/product/agent-skills)
 
+<p align="center">
+  <img alt="Claude Code fixing a production issue from a Traceway error, end to end" src="./traceway-ai-demo.gif" width="900" />
+</p>
+
 ## Symbolication
 
 `app.min.js:1:63` tells you nothing. Traceway resolves minified production errors back to the original file, line, and function the moment they arrive, and the same engine does it for stripped and obfuscated mobile crashes: iOS and Swift against the build's dSYM, Android against its R8 `mapping.txt`, Dart and Flutter against their obfuscation map.
