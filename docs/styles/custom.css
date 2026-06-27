@@ -382,6 +382,9 @@ main hr,
   .nextra-nav-container nav > a:first-child {
     margin-right: auto !important;
   }
+  .nextra-sidebar-container {
+    background: var(--ink-0) !important;
+  }
 }
 
 /* =========================================================================
