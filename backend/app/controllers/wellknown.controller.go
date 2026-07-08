@@ -6,21 +6,22 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/tracewayapp/traceway/backend/app/services/authserver"
+	"github.com/tracewayapp/traceway/backend/app/services/mcpmount"
 )
 
 type wellKnownController struct{}
 
 func (c *wellKnownController) AuthorizationServer(ctx *gin.Context) {
 	issuer := authserver.IssuerBaseURLFromRequest(ctx)
-	// response_types_supported is REQUIRED by RFC 8414 even though neither
-	// supported grant uses the authorization endpoint; "none" keeps spec-strict
-	// clients (e.g. the MCP SDK's metadata schema) from rejecting the document.
 	ctx.JSON(http.StatusOK, gin.H{
 		"issuer":                                issuer,
+		"authorization_endpoint":                issuer + "/oauth/authorize",
 		"token_endpoint":                        issuer + "/api/auth/token",
 		"device_authorization_endpoint":         issuer + "/api/auth/device/authorize",
-		"grant_types_supported":                 []string{"urn:ietf:params:oauth:grant-type:device_code", "refresh_token"},
-		"response_types_supported":              []string{"none"},
+		"registration_endpoint":                 issuer + "/api/oauth/register",
+		"grant_types_supported":                 []string{"authorization_code", "urn:ietf:params:oauth:grant-type:device_code", "refresh_token"},
+		"response_types_supported":              []string{"code"},
+		"code_challenge_methods_supported":      []string{"S256"},
 		"token_endpoint_auth_methods_supported": []string{"none"},
 	})
 }
@@ -29,6 +30,14 @@ func (c *wellKnownController) ProtectedResource(ctx *gin.Context) {
 	issuer := authserver.IssuerBaseURLFromRequest(ctx)
 	ctx.JSON(http.StatusOK, gin.H{
 		"resource":              issuer,
+		"authorization_servers": []string{issuer},
+	})
+}
+
+func (c *wellKnownController) ProtectedResourceMCP(ctx *gin.Context) {
+	issuer := authserver.IssuerBaseURLFromRequest(ctx)
+	ctx.JSON(http.StatusOK, gin.H{
+		"resource":              issuer + mcpmount.Path,
 		"authorization_servers": []string{issuer},
 	})
 }

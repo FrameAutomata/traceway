@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -28,36 +29,53 @@ func InitUseAppAuth() {
 			return
 		}
 
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
-		if strings.HasPrefix(tokenString, "twp_") {
-			pat, err := repositories.PersonalAccessTokenRepository.FindActiveByToken(db.DB, tokenString)
-			if err != nil {
-				c.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("pat lookup failed: %w", err))
-				return
-			}
-			if pat == nil {
+		identity, err := AuthenticateBearer(strings.TrimPrefix(authHeader, "Bearer "))
+		if err != nil {
+			if errors.Is(err, ErrInvalidBearer) {
 				c.AbortWithStatus(http.StatusUnauthorized)
 				return
 			}
-			c.Set(UserIdContextKey, pat.UserId)
-			c.Set(UserEmailContextKey, pat.Email)
-			touchPersonalAccessToken(pat)
-			c.Next()
+			c.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("bearer auth failed: %w", err))
 			return
 		}
 
-		claims, err := services.ValidateToken(tokenString)
-		if err != nil {
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-
-		c.Set(UserIdContextKey, claims.UserId)
-		c.Set(UserEmailContextKey, claims.Email)
+		c.Set(UserIdContextKey, identity.UserId)
+		c.Set(UserEmailContextKey, identity.Email)
 
 		c.Next()
 	}
+}
+
+var ErrInvalidBearer = errors.New("invalid bearer token")
+
+type BearerIdentity struct {
+	UserId  int
+	Email   string
+	Expires time.Time
+}
+
+func AuthenticateBearer(tokenString string) (*BearerIdentity, error) {
+	if strings.HasPrefix(tokenString, "twp_") {
+		pat, err := repositories.PersonalAccessTokenRepository.FindActiveByToken(db.DB, tokenString)
+		if err != nil {
+			return nil, err
+		}
+		if pat == nil {
+			return nil, ErrInvalidBearer
+		}
+		touchPersonalAccessToken(pat)
+		return &BearerIdentity{UserId: pat.UserId, Email: pat.Email}, nil
+	}
+
+	claims, err := services.ValidateToken(tokenString)
+	if err != nil {
+		return nil, ErrInvalidBearer
+	}
+	identity := &BearerIdentity{UserId: claims.UserId, Email: claims.Email}
+	if claims.ExpiresAt != nil {
+		identity.Expires = claims.ExpiresAt.Time
+	}
+	return identity, nil
 }
 
 func touchPersonalAccessToken(pat *repositories.ActivePAT) {

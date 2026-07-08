@@ -23,6 +23,7 @@ import (
 	"github.com/tracewayapp/traceway/backend/app/recordings"
 	"github.com/tracewayapp/traceway/backend/app/retention"
 	"github.com/tracewayapp/traceway/backend/app/services"
+	"github.com/tracewayapp/traceway/backend/app/services/mcpmount"
 	"github.com/tracewayapp/traceway/backend/app/sourcemapbackfill"
 	"github.com/tracewayapp/traceway/backend/app/storage"
 	"github.com/tracewayapp/traceway/backend/app/symbolicator/sourcemap/scopes"
@@ -198,12 +199,15 @@ func Run(opts ...Option) {
 		ctx.JSON(200, gin.H{"version": "0.0.1"})
 	})
 
-	// OAuth discovery documents must live at the origin root (RFC 8414 / RFC
-	// 9728), not under /api, so metadata-driven clients (and the future MCP
-	// integration) can find them. Registered before the SPA NoRoute fallback so
-	// they aren't shadowed by index.html.
-	router.GET("/.well-known/oauth-authorization-server", controllers.WellKnownController.AuthorizationServer)
-	router.GET("/.well-known/oauth-protected-resource", controllers.WellKnownController.ProtectedResource)
+	wellKnown := []string{http.MethodGet, http.MethodOptions}
+	router.Match(wellKnown, "/.well-known/oauth-authorization-server", middleware.WellKnownCors, controllers.WellKnownController.AuthorizationServer)
+	router.Match(wellKnown, "/.well-known/oauth-protected-resource", middleware.WellKnownCors, controllers.WellKnownController.ProtectedResource)
+	router.Match(wellKnown, "/.well-known/oauth-protected-resource"+mcpmount.Path, middleware.WellKnownCors, controllers.WellKnownController.ProtectedResourceMCP)
+
+	mcpHandler := mcpmount.GinHandler(router, "0.0.1")
+	mcpMethods := []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodOptions}
+	router.Match(mcpMethods, mcpmount.Path, middleware.MCPCors, mcpHandler)
+	router.Match(mcpMethods, mcpmount.Path+"/", middleware.MCPCors, mcpHandler)
 
 	apiOnly := cfg.APIOnly == "true"
 
