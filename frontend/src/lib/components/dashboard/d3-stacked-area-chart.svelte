@@ -3,6 +3,7 @@
 	import { stack, area, stackOrderReverse } from 'd3-shape';
 	import { min, max } from 'd3-array';
 	import { formatDateTime } from '$lib/utils/formatters';
+	import { formatMetricValue } from '$lib/utils/metric-format';
 	import { getTimezone } from '$lib/state/timezone.svelte';
 
 	type DataPoint = {
@@ -23,7 +24,9 @@
 		padding = { top: 10, right: 4, bottom: 20, left: 55 },
 		unit = 'ms',
 		formatValue,
-		onRangeSelect
+		onRangeSelect,
+		colors = null,
+		showBuiltinLegend = true
 	} = $props<{
 		endpoints: string[];
 		series: DataPoint[];
@@ -32,6 +35,8 @@
 		unit?: string;
 		formatValue?: (value: number) => string;
 		onRangeSelect?: (from: Date, to: Date) => void;
+		colors?: string[] | null;
+		showBuiltinLegend?: boolean;
 	}>();
 
 	const tz = $derived(getTimezone());
@@ -45,6 +50,8 @@
 		'var(--chart-5)',
 		'var(--muted-foreground)' // For "Other"
 	];
+
+	const palette = $derived(colors && colors.length > 0 ? colors : chartColors);
 
 	let containerRef = $state<HTMLDivElement | null>(null);
 	let width = $state(300);
@@ -157,13 +164,23 @@
 	// Generate Y axis ticks
 	const yTicks = $derived(() => yScale.ticks(4));
 
-	// Format Y axis label
+	// Format Y axis label — scaled number only; the unit is shown once above the axis
 	function formatYLabel(value: number): string {
+		if (unit) {
+			return formatMetricValue(value, unit).text;
+		}
 		if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
 		if (value >= 1000) return (value / 1000).toFixed(1) + 'k';
 		if (Number.isInteger(value)) return value.toString();
 		return value.toFixed(1);
 	}
+
+	const yAxisUnit = $derived(() => {
+		if (!unit) return '';
+		const ticks = yTicks();
+		if (ticks.length === 0) return unit;
+		return formatMetricValue(ticks[ticks.length - 1], unit).unit;
+	});
 
 	// Generate stacked area paths
 	const stackedAreas = $derived(() => {
@@ -184,7 +201,7 @@
 		return stackedSeries.map((s, i) => ({
 			key: s.key,
 			path: areaGen(s as unknown as [number, number][]) || '',
-			color: chartColors[i % chartColors.length]
+			color: palette[i % palette.length]
 		}));
 	});
 
@@ -321,8 +338,8 @@
 	// Get color for an endpoint
 	function getEndpointColor(endpoint: string): string {
 		const idx = endpoints.indexOf(endpoint);
-		if (idx === -1) return chartColors[chartColors.length - 1];
-		return chartColors[idx % chartColors.length];
+		if (idx === -1) return palette[palette.length - 1];
+		return palette[idx % palette.length];
 	}
 
 	// Truncate long endpoint names for legend
@@ -376,6 +393,20 @@
 							{formatYLabel(tick)}
 						</text>
 					{/each}
+
+					<!-- Y axis unit label -->
+					{#if yAxisUnit()}
+						<text
+							x={-8}
+							y={-4}
+							text-anchor="end"
+							fill="currentColor"
+							class="text-muted-foreground"
+							font-size="10"
+						>
+							{yAxisUnit()}
+						</text>
+					{/if}
 
 					<!-- X axis line -->
 					<line
@@ -477,11 +508,11 @@
 	</div>
 
 	<!-- Legend -->
-	{#if hasData}
+	{#if hasData && showBuiltinLegend}
 		<div class="flex flex-wrap gap-x-4 gap-y-1 px-2 text-xs text-muted-foreground">
 			{#each endpoints as endpoint, i}
 				<div class="flex items-center gap-1.5">
-					<span class="h-2 w-2 rounded-full flex-shrink-0" style="background-color: {chartColors[i % chartColors.length]};"></span>
+					<span class="h-2 w-2 rounded-full flex-shrink-0" style="background-color: {palette[i % palette.length]};"></span>
 					<span class="truncate max-w-[180px]" title={endpoint}>{truncateEndpoint(endpoint, 25)}</span>
 				</div>
 			{/each}
